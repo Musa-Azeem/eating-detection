@@ -2,13 +2,13 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from pathlib import Path
-import seaborn as sns
-from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 from typing import List
-from sklearn.metrics import precision_recall_fscore_support, f1_score,recall_score,precision_score,confusion_matrix
+from sklearn.metrics import precision_recall_fscore_support
 import pandas as pd
 import json
+from .utils import plot_and_save_cm, plot_and_save_loss, plot_and_save_losses
+from tqdm import tqdm
 
 def read_and_window_session(session_idx, winsize, datapath, labelpath):
     df = pd.read_csv(
@@ -48,8 +48,6 @@ def pad_for_windowing(X: torch.Tensor, winsize: int) -> torch.Tensor:
     X = nn.functional.pad(X, (0, 0, p, p), "constant", 0)
     return X
 
-
-
 def window_session(X: torch.Tensor, winsize: int) -> torch.Tensor:
     # Input shape: L x 3
     # Output shape: L x 3*WINSIZE
@@ -81,13 +79,6 @@ def window_session(X: torch.Tensor, winsize: int) -> torch.Tensor:
     X = torch.cat([xs,ys,zs], axis=1)
     return X
 
-def metrics(y_true,y_pred):
-    return {
-        'precision':precision_score(y_true=y_true,y_pred=y_pred,average='macro'),
-        'recall':recall_score(y_true=y_true,y_pred=y_pred,average='macro'),
-        'f1':f1_score(y_true=y_true,y_pred=y_pred,average='macro')
-    }
-
 def evaluate_loop(
     model: nn.Module, 
     criterion: nn.Module, 
@@ -109,7 +100,14 @@ def evaluate_loop(
             y_true, y_pred, zero_division='warn', pos_label=1, average='binary'
         )
 
-        return y_true, y_pred, dev_loss, prec, recall, f1score
+        return {
+            "true": y_true, 
+            "pred": y_pred, 
+            "loss": dev_loss, 
+            "precision": prec, 
+            "recall": recall, 
+            "f1": f1score
+        }
     
     return y_true, y_pred, dev_loss
 
@@ -135,35 +133,113 @@ def inner_evaluate_loop(
 
     return (torch.cat(y_true), torch.cat(y_preds), dev_lossi)
 
-def plot_and_save_cm(
-    y_true, 
-    y_pred, 
-    filename: str = None
-) -> None:
-    """ 
-        Plot and save confusion matrix (recall, precision, and total) for 
-        given true labels and predictions. Saves plot to image with given 
-        filename
 
-    Args:
-        y_true: True labels, 0 or 1 for each example
-        y_pred: Predictions - same length as y_true
-        filename (str): file name and path to save image as
-    """
+def train_loop(
+    model: nn.Module,
+    trainloader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer, 
+    epochs: int,
+    device: str,
+    outdir: Path = None,
+):
+    if outdir:
+        model_outdir = outdir / 'model'
+        model_outdir.mkdir(parents=True)
 
-    fig,axes = plt.subplots(1,3,sharey=True,figsize=(10,5))
+    train_loss = []
 
-    sns.heatmap(confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='true'),annot=True,ax=axes[0],cbar=False,fmt='.2f')
-    sns.heatmap(confusion_matrix(y_true=y_true,y_pred=y_pred,normalize='pred'),annot=True,ax=axes[1],cbar=False,fmt='.2f')
-    sns.heatmap(confusion_matrix(y_true=y_true,y_pred=y_pred),annot=True,ax=axes[2],cbar=False,fmt='.2f')
+    pbar = tqdm(range(epochs))
+    for epoch in pbar:
 
-    axes[0].set_title('Recall')
-    axes[1].set_title('Precision')
-    axes[2].set_title('Count')
-    fig.set_size_inches(16, 9)
+        # Train Loop
+        train_lossi = inner_train_loop(model, trainloader, criterion, optimizer, device)
+        train_loss.append(sum(train_lossi) / len(trainloader))
+
+        pbar.set_description(f'Epoch {epoch}: Train Loss: {train_loss[-1]:.5}')
+
+        # Plot loss
+        plt.plot(train_loss)
+        plt.savefig('running_loss.jpg')
+
+        if outdir:
+            torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
+            plot_and_save_loss(train_loss, epochs, str(outdir / 'loss.jpg'))
+        
+        if epoch != epochs-1:
+            plt.close()
+
+    plt.show()
+
+def inner_train_loop(
+    model: nn.Module,
+    trainloader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    device: str,
+) -> list[float]:
+
+    model.train()
+    lossi = []
+    for Xtr,ytr in trainloader:
+        Xtr,ytr = Xtr.to(device),ytr.to(device)
+
+        # Forward pass
+        logits = model(Xtr)
+        loss = criterion(logits, ytr)
+
+        # Backward pass
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        lossi.append(loss.item())
     
-    if filename:
-        plt.savefig(filename, dpi=400, bbox_inches='tight')
+    return lossi
+
+def optimization_loop(
+    model: nn.Module,
+    trainloader: DataLoader,
+    devloader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer, 
+    epochs: int,
+    device: str,
+    outdir: Path = None,
+):
+    if outdir:
+        model_outdir = outdir / 'model'
+        model_outdir.mkdir(parents=True)
+
+    train_loss = []
+    dev_loss = []
+
+    lowest_loss = -1
+
+    pbar = tqdm(range(epochs))
+    for epoch in pbar:
+
+        # Train Loop
+        train_lossi = inner_train_loop(model, trainloader, criterion, optimizer, device)
+        train_loss.append(sum(train_lossi) / len(trainloader))            
+
+        # Dev Loop
+        y_true, y_pred, dev_lossi = inner_evaluate_loop(model, devloader, criterion, device)
+        dev_loss.append(sum(dev_lossi) / len(devloader))
+
+        pbar.set_description(f'Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
+
+        # Plot loss
+        plt.plot(train_loss)
+        plt.plot(dev_loss)
+        plt.savefig('running_loss.jpg')
+
+        if outdir:
+            torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
+            plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'))
+
+            # Save model with lowest loss
+            if lowest_loss < 0 or dev_loss[-1] < lowest_loss:
+                lowest_loss = dev_loss[-1]
+                torch.save(model.state_dict(), outdir / f'best_model.pt')
         plt.close()
-    else:
-        plt.show()
