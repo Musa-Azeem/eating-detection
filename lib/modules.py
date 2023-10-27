@@ -1,34 +1,22 @@
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from pathlib import Path
 import matplotlib.pyplot as plt
 from typing import List
 from sklearn.metrics import precision_recall_fscore_support
 import pandas as pd
 import json
-from .utils import plot_and_save_cm, plot_and_save_loss, plot_and_save_losses
+from .utils import (
+    plot_and_save_cm, 
+    plot_and_save_loss, 
+    plot_and_save_losses,
+    summary,
+    get_bouts
+)
 from tqdm import tqdm
+import plotly.express as px
 
-def read_and_window_session(session_idx, winsize, datapath, labelpath):
-    df = pd.read_csv(
-        Path(datapath, f'{session_idx}', 'raw_data.csv'), 
-        header=None,
-        usecols=[2,3,4]
-    )
-
-    labels = json.load(
-        Path(labelpath, f'{session_idx}_data.json').open()
-    )
-
-    X = torch.Tensor(df.values)
-    y = torch.zeros(len(X), 1)
-    y[labels['start']:labels['end']] = 1
-
-    X = pad_for_windowing(X, winsize)
-    X = window_session(X, winsize)
-
-    return X,y
 
 def read_session(session_idx, datapath):
     df = pd.read_csv(
@@ -38,6 +26,19 @@ def read_session(session_idx, datapath):
         names=['x_acc','y_acc','z_acc']
     )
     return df
+
+def read_labels(session_idx, labelpath):
+    labels_file = Path(labelpath, f'{session_idx}_data.json')
+    if not labels_file.is_file():
+        print(f'Error - label file for participant {session_idx} does not exist')
+        return None
+
+    labels = json.load(labels_file.open())
+    if not ('start' in labels and 'end' in labels):
+        print(f'Error - labels for participant {session_idx} do not exist')
+        return None
+
+    return labels
 
 def pad_for_windowing(X: torch.Tensor, winsize: int) -> torch.Tensor:
     if winsize % 2 != 1:
@@ -79,38 +80,49 @@ def window_session(X: torch.Tensor, winsize: int) -> torch.Tensor:
     X = torch.cat([xs,ys,zs], axis=1)
     return X
 
+def read_and_window_session(session_idx, winsize, datapath, labelpath):
+    df = read_session(session_idx, datapath)
+    labels = read_labels(session_idx, labelpath)
+
+    X = torch.Tensor(df.values)
+    y = torch.zeros(len(X), 1)
+    y[labels['start']:labels['end']] = 1
+
+    X = pad_for_windowing(X, winsize)
+    X = window_session(X, winsize)
+
+    return X,y
+
 def evaluate_loop(
     model: nn.Module, 
     criterion: nn.Module, 
     devloader: DataLoader, 
     device: str,
-    metrics: bool = False,
     outdir: Path = None,
 
 ) -> any:
 
-    y_true, y_pred, dev_lossi = inner_evaluate_loop(model, devloader, criterion, device)
+    y_true, y_pred, confs, dev_lossi = inner_evaluate_loop(model, devloader, criterion, device)
     dev_loss = sum(dev_lossi) / len(devloader)
 
     if outdir:
         plot_and_save_cm(y_true, y_pred, outdir)
 
-    if metrics:
-        prec, recall, f1score, _ = precision_recall_fscore_support(
-            y_true, y_pred, zero_division='warn', pos_label=1, average='binary'
-        )
+    prec, recall, f1score, _ = precision_recall_fscore_support(
+        y_true, y_pred, zero_division='warn', pos_label=1, average='binary'
+    )
 
-        return {
-            "true": y_true, 
-            "pred": y_pred, 
-            "loss": dev_loss, 
-            "precision": prec, 
-            "recall": recall, 
-            "f1": f1score
-        }
+    return ({
+        "true": y_true, 
+        "pred": y_pred, 
+        "conf": confs,
+    }, {
+        "loss": dev_loss, 
+        "precision": prec, 
+        "recall": recall, 
+        "f1": f1score
+    })
     
-    return y_true, y_pred, dev_loss
-
 def inner_evaluate_loop(
     model: nn.Module,
     devloader: DataLoader,
@@ -120,6 +132,7 @@ def inner_evaluate_loop(
 
     y_preds = []
     y_true = []
+    all_confs = []
     dev_lossi = []
 
     model.eval()
@@ -128,10 +141,16 @@ def inner_evaluate_loop(
         X,y = X.to(device), y.to(device)
         logits = model(X)
         dev_lossi.append(criterion(logits, y).item())
-        pred = torch.round(nn.Sigmoid()(logits)).detach().to('cpu')
-        y_preds.append(pred)
+        confs = torch.sigmoid(logits).detach().cpu()
+        all_confs.append(confs)
+        y_preds.append(torch.round(confs))
 
-    return (torch.cat(y_true), torch.cat(y_preds), dev_lossi)
+    return (
+        torch.cat(y_true), 
+        torch.cat(y_preds), 
+        torch.cat(all_confs), 
+        dev_lossi
+    )
 
 
 def train_loop(
@@ -243,3 +262,54 @@ def optimization_loop(
                 lowest_loss = dev_loss[-1]
                 torch.save(model.state_dict(), outdir / f'best_model.pt')
         plt.close()
+
+def predict_and_plot_pretty_session(
+    session_idx, 
+    dim_factor, 
+    datapath, 
+    labelpath,
+    winsize,
+    model,
+    criterion,
+    batch_size,
+    device
+):
+    session = read_session(session_idx, datapath)
+    labels = read_labels(session_idx, labelpath)
+    X,y = read_and_window_session(session_idx, winsize, datapath, labelpath)
+    ys, metrics = evaluate_loop(
+        model, 
+        criterion, 
+        DataLoader(TensorDataset(X, y), batch_size), 
+        device
+    )
+    pred_bouts = get_bouts(ys['pred'])
+
+    summary(metrics)
+
+    session['Predicted Eating'] = ys['pred']
+    session['Confidence'] = ys['conf']
+
+    fig = px.line(
+        session[::dim_factor], 
+        x=session.index[::dim_factor], 
+        y=['x_acc','y_acc','z_acc', 'Predicted Eating', 'Confidence']
+    )
+    fig.add_vrect(
+        x0=labels['start'], 
+        x1=labels['end'], 
+        fillcolor='black', 
+        opacity=.2,
+        line_width=0,
+        layer="below"
+    )
+    for bout in pred_bouts:
+        fig.add_vrect(
+            x0=bout['start'], 
+            x1=bout['end'], 
+            fillcolor='red', 
+            opacity=.2,
+            line_width=0,
+            layer="below"
+        )
+    fig.show(renderer='browser')

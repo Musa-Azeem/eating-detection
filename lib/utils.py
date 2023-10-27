@@ -23,7 +23,7 @@ def metrics(y_true,y_pred):
 def summary(metrics: dict):
     m = [["Metric", "Value"]]
     for key in metrics:
-        if key == "pred" or key == "true":
+        if isinstance(metrics[key], torch.Tensor):
             continue
         m.append([key, metrics[key]])
     print(tabulate(m, headers="firstrow"))
@@ -111,3 +111,20 @@ def plot_and_save_losses(
     plt.title(f'Train and Test Loss over {n_epochs} Epochs')
     plt.savefig(filename, dpi=400)
     plt.close()
+
+def get_bouts(y_pred) -> list[dict]:
+    last_y = 0
+    bouts = []
+    for i,y in enumerate(y_pred):
+        if y == 0:
+            if last_y == 0:
+                continue
+            if last_y == 1:
+                bouts[-1]['end'] = i
+        if y == 1:
+            if last_y == 0:
+                bouts.append({'start': i, 'end': len(y_pred)})
+            if last_y == 1:
+                continue
+        last_y = y
+    return bouts
