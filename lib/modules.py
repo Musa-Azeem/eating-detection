@@ -243,7 +243,7 @@ def optimization_loop(
         train_loss.append(sum(train_lossi) / len(trainloader))            
 
         # Dev Loop
-        y_true, y_pred, dev_lossi = inner_evaluate_loop(model, devloader, criterion, device)
+        y_true, y_pred, confs, dev_lossi = inner_evaluate_loop(model, devloader, criterion, device)
         dev_loss.append(sum(dev_lossi) / len(devloader))
 
         pbar.set_description(f'Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
