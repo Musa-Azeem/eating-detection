@@ -115,9 +115,12 @@ def plot_and_save_losses(
 def get_bouts(y_pred) -> list[dict]:
     last_y = 0
     bouts = []
+    debug = []
     for i,y in enumerate(y_pred):
+        debug.append(last_y)
         if y == 0:
             if last_y == 0:
+                last_y = y.item()
                 continue
             if last_y == 1:
                 bouts[-1]['end'] = i
@@ -125,6 +128,29 @@ def get_bouts(y_pred) -> list[dict]:
             if last_y == 0:
                 bouts.append({'start': i, 'end': len(y_pred)})
             if last_y == 1:
+                last_y = y.item()
                 continue
-        last_y = y
+        last_y = y.item()
+    return bouts
+
+def get_bouts_smoothed(y_pred) -> list[dict]:
+    last_y = 0
+    state = 0
+    bouts = []
+    for i,y in enumerate(y_pred):
+        state = last_y
+        last_y = y.item()
+        if y == 0:
+            if state == 0:
+                continue
+            if state == 1:
+                bouts[-1]['end'] = i
+        if y == 1:
+            if state == 0:
+                if len(bouts) != 0 and i - bouts[-1]['end'] < 1500:
+                    continue
+                else:
+                    bouts.append({'start': i, 'end': len(y_pred)})
+            if state == 1:
+                continue
     return bouts

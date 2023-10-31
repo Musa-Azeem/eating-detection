@@ -12,10 +12,12 @@ from .utils import (
     plot_and_save_loss, 
     plot_and_save_losses,
     summary,
-    get_bouts
+    get_bouts,
+    get_bouts_smoothed
 )
 from tqdm import tqdm
 import plotly.express as px
+import os
 
 
 def read_session(session_idx, datapath):
@@ -261,6 +263,7 @@ def optimization_loop(
             if lowest_loss < 0 or dev_loss[-1] < lowest_loss:
                 lowest_loss = dev_loss[-1]
                 torch.save(model.state_dict(), outdir / f'best_model.pt')
+                os.system(f'touch {outdir / str(epoch)}.txt') 
         plt.close()
 
 def predict_and_plot_pretty_session(
@@ -283,7 +286,7 @@ def predict_and_plot_pretty_session(
         DataLoader(TensorDataset(X, y), batch_size), 
         device
     )
-    pred_bouts = get_bouts(ys['pred'])
+    pred_bouts = get_bouts_smoothed(ys['pred'])
 
     summary(metrics)
 
