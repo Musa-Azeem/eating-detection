@@ -108,7 +108,7 @@ class ResNetClassifier(nn.Module):
         self.resnet_conv = ResNetConv(in_channels=in_channels, winsize=self.winsize)
         # Global Pooling and output
         self.gp = nn.AvgPool1d(kernel_size=self.winsize)    # Take mean across each feature map (N, C, L) => (N,C)
-        self.output = nn.Linear(in_features=4, out_features=1)
+        self.output = nn.Linear(in_features=5, out_features=1)
 
     def forward(self, x):
         # Run convolutional layers of ResNet
@@ -152,8 +152,8 @@ class ResNetConv(nn.Module):
         self.winsize = winsize
 
         # First ResNet Block components
-        self.shortcut1 = self.shortcut(in_channels=in_channels, out_channels=2)
-        self.res1 = self.inner_res_block(in_channels=in_channels, out_channels=2)
+        self.shortcut1 = self.shortcut(in_channels=in_channels, out_channels=3)
+        self.res1 = self.inner_res_block(in_channels=in_channels, out_channels=3)
         self.relu1 = nn.ReLU()
 
         # # Second Res Block components
@@ -162,8 +162,8 @@ class ResNetConv(nn.Module):
         # self.relu2 = nn.ReLU()
 
         # Third Res Block components
-        self.shortcut3 = self.shortcut(in_channels=2, out_channels=4)
-        self.res3 = self.inner_res_block(in_channels=2, out_channels=4)
+        self.shortcut3 = self.shortcut(in_channels=3, out_channels=5)
+        self.res3 = self.inner_res_block(in_channels=3, out_channels=5)
         self.relu3 = nn.ReLU()
 
     def forward(self, x):
