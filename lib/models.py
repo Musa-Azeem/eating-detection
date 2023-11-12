@@ -189,3 +189,59 @@ class ResNetConv(nn.Module):
         y = self.relu3(y)
 
         return y
+
+
+
+
+class LinearAutoencoder(nn.Module):
+    def __init__(self, winsize):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(winsize*3, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
+            nn.ReLU(), 
+            nn.Linear(64, 12), 
+            nn.ReLU(True), 
+            nn.Linear(12, 3)
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(3, 12),
+            nn.ReLU(),
+            nn.Linear(12, 64),
+            nn.ReLU(),
+            nn.Linear(64, 128),
+            nn.ReLU(), 
+            nn.Linear(128, winsize*3)
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+class ConvAutoencoder(nn.Module):
+    def __init__(self, winsize):
+        super().__init__()
+        self.winsize = winsize
+        self.encoder = nn.Sequential(
+            nn.Conv1d(in_channels=3, out_channels=8, kernel_size=3, stride=1, padding='same'),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=2),
+            nn.Conv1d(in_channels=8, out_channels=4, kernel_size=3, stride=1, padding='same'),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2, stride=1)
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose1d(in_channels=4, out_channels=8, kernel_size=3, stride=1, padding='same'),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels=8, out_channels=4, kernel_size=5, stride=1, padding='same'),
+            nn.ReLU(),
+            nn.ConvTranspose2d(in_channels=4, out_channels=3, kernel_size=2, stride=1, padding='same')
+        )
+
+    def forward(self, x):
+        x = x.view(-1,3,self.winsize)
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
