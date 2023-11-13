@@ -16,10 +16,10 @@ model = ConvAutoencoder(winsize=WINSIZE).to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 criterion = nn.MSELoss()
 
-testloader = torch.load('pytorch_datasets/testloader_11-10-23.pt')
 trainloader = torch.load('pytorch_datasets/trainloader_11-10-23.pt')
+testloader = torch.load('pytorch_datasets/testloader_11-10-23.pt')
 
-epochs = 2
+epochs = 40
 
 losses = []
 test_losses = []
@@ -58,10 +58,10 @@ for epoch in pbar:
     plt.plot(losses)
     plt.plot(test_losses)
     plt.savefig('running_loss.png')
-    torch.save(model.state_dict(), f'dev/autoencoder/model/{epoch}.pt')
-    plot_and_save_losses(losses, test_losses, epoch, Path('dev/autoencoder/loss.jpg'))
+    torch.save(model.state_dict(), f'dev/autoencoder2/model/{epoch}.pt')
+    plot_and_save_losses(losses, test_losses, epoch, Path('dev/autoencoder2/loss.jpg'))
 
     # Save model with lowest loss
     if lowest_loss < 0 or test_losses[-1] < lowest_loss:
         lowest_loss = test_losses[-1]
-        torch.save(model.state_dict(), f'dev/autoencoder/best_model-{epoch}.pt')
+        torch.save(model.state_dict(), f'dev/autoencoder2/best_model-{epoch}.pt')
