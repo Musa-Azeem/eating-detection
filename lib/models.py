@@ -241,3 +241,22 @@ class ConvAutoencoder(nn.Module):
         x = self.encoder(x)
         x = self.decoder(x)
         return x.flatten(start_dim=1)
+    
+class EncoderClassifier(nn.Module):
+    def __init__(self, autoencoder: ConvAutoencoder):
+        super().__init__()
+        self.winsize = autoencoder.winsize
+        self.encoder = autoencoder.encoder
+        self.encoder.requires_grad_ = False
+        self.classifier = nn.Sequential(
+            nn.Linear(in_features=52, out_features=10),
+            nn.ReLU(),
+            nn.Linear(in_features=10, out_features=1)
+        )
+
+    def forward(self, x):
+        x = x.view(-1,3,self.winsize)
+        x = self.encoder(x)
+        x = x.flatten(start_dim=1)
+        x = self.classifier(x)
+        return x

@@ -47,8 +47,8 @@ def read_nursing_labels(session_idx, labelpath):
     return labels
 
 def read_and_window_nursing_session(session_idx, winsize, datapath, labelpath):
-    df = read_session(session_idx, datapath)
-    labels = read_labels(session_idx, labelpath)
+    df = read_nursing_session(session_idx, datapath)
+    labels = read_nursing_labels(session_idx, labelpath)
 
     X = torch.Tensor(df.values)
     y = torch.zeros(len(X), 1)
