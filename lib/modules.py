@@ -315,9 +315,9 @@ def predict_and_plot_pretty_session(
     batch_size,
     device
 ):
-    session = read_session(session_idx, datapath)
-    labels = read_labels(session_idx, labelpath)
-    X,y = read_and_window_session(session_idx, winsize, datapath, labelpath)
+    session = read_nursing_session(session_idx, datapath)
+    labels = read_nursing_labels(session_idx, labelpath)
+    X,y = read_and_window_nursing_session(session_idx, winsize, datapath, labelpath)
     ys, metrics = evaluate_loop(
         model, 
         criterion, 
