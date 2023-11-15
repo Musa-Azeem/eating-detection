@@ -260,28 +260,32 @@ class EncoderClassifier(nn.Module):
         x = x.flatten(start_dim=1)
         x = self.classifier(x)
         return x
+    
 
 
-
-
-
-
-
-class ConvAutoencoderImproved(nn.Module):
+class ConvAutoencoderNew(nn.Module):
     def __init__(self, winsize):
         super().__init__()
         self.winsize = winsize
         self.encoder = nn.Sequential(
-            nn.Conv1d(in_channels=3, out_channels=8, kernel_size=15, stride=1, padding=7), # Nx3x101 -> Nx8x101
+            nn.Conv1d(in_channels=3, out_channels=16, kernel_size=15, padding=7), # Nx3x101 -> Nx16x101
+            nn.MaxPool1d(kernel_size=3, stride=3), # Nx16x101 -> Nx16x33
             nn.ReLU(),
-            nn.MaxPool1d(),
-            nn.Conv1d(in_channels=8, out_channels=4, kernel_size=3, stride=3, padding=2), # Nx8x35 -> Nx4x13
+            nn.Conv1d(in_channels=16, out_channels=8, kernel_size=9, padding=4), # Nx16x33 -> Nx8x33
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=3, stride=3), # Nx8x33 -> Nx8x11,
+            nn.Conv1d(in_channels=8, out_channels=4, kernel_size=5, padding=2), # Nx8x11 -> Nx4x11
             nn.ReLU()
         )
         self.decoder = nn.Sequential(
-            nn.ConvTranspose1d(in_channels=4, out_channels=8, kernel_size=3, stride=3, padding=2), # Nx4x13 -> Nx8x35
+            nn.ConvTranspose1d(in_channels=4, out_channels=8, kernel_size=5, padding=2), # Nx4x11 -> Nx8x11
             nn.ReLU(),
-            nn.ConvTranspose1d(in_channels=8, out_channels=3, kernel_size=3, stride=3, padding=2), # Nx8x25 -> Nx3x101
+            nn.Upsample(scale_factor=3, mode='nearest'), # Nx8x11 -> Nx8x33
+            nn.ReLU(),
+            nn.ConvTranspose1d(in_channels=8, out_channels=16, kernel_size=9, padding=4), # Nx8x33 -> Nx16x33
+            nn.Upsample(scale_factor=3.09, mode='nearest'), # Nx16x33 -> Nx16x101
+            nn.ReLU(),
+            nn.ConvTranspose1d(in_channels=16, out_channels=3, kernel_size=15, padding=7), # Nx16x101 -> Nx3x101
         )
 
     def forward(self, x):
