@@ -20,7 +20,11 @@ import plotly.express as px
 import os
 
 
-def read_session(session_idx, datapath):
+# =============================================================================
+# =================== Nursing Data Loading and Processing =====================
+# =============================================================================
+
+def read_nursing_session(session_idx, datapath):
     df = pd.read_csv(
         Path(datapath, f'{session_idx}', 'raw_data.csv'), 
         header=None,
@@ -29,7 +33,7 @@ def read_session(session_idx, datapath):
     )
     return df
 
-def read_labels(session_idx, labelpath):
+def read_nursing_labels(session_idx, labelpath):
     labels_file = Path(labelpath, f'{session_idx}_data.json')
     if not labels_file.is_file():
         print(f'Error - label file for participant {session_idx} does not exist')
@@ -41,6 +45,39 @@ def read_labels(session_idx, labelpath):
         return None
 
     return labels
+
+def read_and_window_nursing_session(session_idx, winsize, datapath, labelpath):
+    df = read_nursing_session(session_idx, datapath)
+    labels = read_nursing_labels(session_idx, labelpath)
+
+    X = torch.Tensor(df.values)
+    y = torch.zeros(len(X), 1)
+    y[labels['start']:labels['end']] = 1
+
+    X = pad_for_windowing(X, winsize)
+    X = window_session(X, winsize)
+
+    return X,y
+
+
+
+# =============================================================================
+# ==================== Delta Data Loading and Processing ========================
+# =============================================================================
+
+# def read_delta_session(filepath):
+#     df = pd.read_csv(
+#         Path(filepath), 
+#         header=None,
+#         usecols=[2,3,4],
+#         names=['x_acc','y_acc','z_acc']
+#     )
+#     return df
+
+
+# =============================================================================
+# =========================== Tensor Processing ===============================
+# =============================================================================
 
 def pad_for_windowing(X: torch.Tensor, winsize: int) -> torch.Tensor:
     if winsize % 2 != 1:
@@ -82,18 +119,11 @@ def window_session(X: torch.Tensor, winsize: int) -> torch.Tensor:
     X = torch.cat([xs,ys,zs], axis=1)
     return X
 
-def read_and_window_session(session_idx, winsize, datapath, labelpath):
-    df = read_session(session_idx, datapath)
-    labels = read_labels(session_idx, labelpath)
 
-    X = torch.Tensor(df.values)
-    y = torch.zeros(len(X), 1)
-    y[labels['start']:labels['end']] = 1
 
-    X = pad_for_windowing(X, winsize)
-    X = window_session(X, winsize)
-
-    return X,y
+# =============================================================================
+# =================== Training and Evaluating Modules =========================
+# =============================================================================
 
 def evaluate_loop(
     model: nn.Module, 
@@ -266,6 +296,14 @@ def optimization_loop(
                 os.system(f'touch {outdir / str(epoch)}.txt') 
         plt.close()
 
+
+
+
+
+# =============================================================================
+# ================================ Misc =======================================
+# =============================================================================
+
 def predict_and_plot_pretty_session(
     session_idx, 
     dim_factor, 
@@ -277,9 +315,9 @@ def predict_and_plot_pretty_session(
     batch_size,
     device
 ):
-    session = read_session(session_idx, datapath)
-    labels = read_labels(session_idx, labelpath)
-    X,y = read_and_window_session(session_idx, winsize, datapath, labelpath)
+    session = read_nursing_session(session_idx, datapath)
+    labels = read_nursing_labels(session_idx, labelpath)
+    X,y = read_and_window_nursing_session(session_idx, winsize, datapath, labelpath)
     ys, metrics = evaluate_loop(
         model, 
         criterion, 
