@@ -115,9 +115,7 @@ def plot_and_save_losses(
 def get_bouts(y_pred) -> list[dict]:
     last_y = 0
     bouts = []
-    debug = []
     for i,y in enumerate(y_pred):
-        debug.append(last_y)
         if y == 0:
             if last_y == 0:
                 last_y = y.item()

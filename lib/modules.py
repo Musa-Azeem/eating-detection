@@ -313,7 +313,8 @@ def predict_and_plot_pretty_session(
     model,
     criterion,
     batch_size,
-    device
+    device,
+    smooth=True
 ):
     session = read_nursing_session(session_idx, datapath)
     labels = read_nursing_labels(session_idx, labelpath)
@@ -324,7 +325,11 @@ def predict_and_plot_pretty_session(
         DataLoader(TensorDataset(X, y), batch_size), 
         device
     )
-    pred_bouts = get_bouts_smoothed(ys['pred'])
+
+    if smooth:
+        pred_bouts = get_bouts_smoothed(ys['pred'])
+    else:
+        pred_bouts = get_bouts(ys['pred'])
 
     summary(metrics)
 
