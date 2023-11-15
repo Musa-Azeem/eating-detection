@@ -3,23 +3,24 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 from torch.utils.data import TensorDataset, DataLoader
-from lib.models import  ConvAutoencoder
+from lib.models import  ConvAutoencoderImproved
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from lib.utils import plot_and_save_losses
 from pathlib import Path
+import os
 
 WINSIZE = 101
 DEVICE = 'cuda:0'
 
-model = ConvAutoencoder(winsize=WINSIZE).to(DEVICE)
+model = ConvAutoencoderImproved(winsize=WINSIZE).to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 criterion = nn.MSELoss()
 
-trainloader = torch.load('pytorch_datasets/trainloader_11-10-23.pt')
-testloader = torch.load('pytorch_datasets/testloader_11-10-23.pt')
+trainloader = torch.load('pytorch_datasets/trainloader_11-15-23.pt')
+testloader = torch.load('pytorch_datasets/testloader_11-15-23.pt')
 
-epochs = 40
+epochs = 100
 
 losses = []
 test_losses = []
@@ -58,10 +59,11 @@ for epoch in pbar:
     plt.plot(losses)
     plt.plot(test_losses)
     plt.savefig('running_loss.png')
-    torch.save(model.state_dict(), f'dev/autoencoder2/model/{epoch}.pt')
-    plot_and_save_losses(losses, test_losses, epoch, Path('dev/autoencoder2/loss.jpg'))
+    torch.save(model.state_dict(), f'dev/autoencoder3/model/{epoch}.pt')
+    plot_and_save_losses(losses, test_losses, epoch, Path('dev/autoencoder3/loss.jpg'))
 
     # Save model with lowest loss
     if lowest_loss < 0 or test_losses[-1] < lowest_loss:
         lowest_loss = test_losses[-1]
-        torch.save(model.state_dict(), f'dev/autoencoder2/best_model-{epoch}.pt')
+        torch.save(model.state_dict(), f'dev/autoencoder3/best_model.pt')
+        os.system(f'touch dev/autoencoder3/{str(epoch)}.txt')

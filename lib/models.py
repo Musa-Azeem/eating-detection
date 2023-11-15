@@ -263,7 +263,7 @@ class EncoderClassifier(nn.Module):
     
 
 
-class ConvAutoencoderNew(nn.Module):
+class ConvAutoencoderImproved(nn.Module):
     def __init__(self, winsize):
         super().__init__()
         self.winsize = winsize
