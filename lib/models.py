@@ -293,3 +293,44 @@ class ConvAutoencoderImproved(nn.Module):
         x = self.encoder(x)
         x = self.decoder(x)
         return x.flatten(start_dim=1)
+
+
+class EncoderClassifier(nn.Module):
+    def __init__(self, winsize, weights_file=None, freeze=False):
+        super().__init__()
+
+        self.winsize = winsize
+        self.weights_file = weights_file
+        self.freeze = freeze
+
+        self.encoder = self.get_encoder()
+        
+        self.classifier = nn.Sequential(
+            nn.Linear(in_features=44, out_features=10),
+            nn.ReLU(),
+            nn.Linear(in_features=10, out_features=1)
+        )
+
+    def forward(self, x):
+        x = x.view(-1,3,self.winsize)
+        x = self.encoder(x)
+        x = x.flatten(start_dim=1)
+        x = self.classifier(x)
+        return x
+
+    def get_encoder(self):
+        autoencoder = ConvAutoencoderImproved(self.winsize)
+
+        if self.weights_file:
+            print("Model is loading pretrained encoder")
+            autoencoder.load_state_dict(torch.load(self.weights_file))
+        
+        encoder = autoencoder.encoder
+
+        if self.freeze:
+            print("Model is freezing encoder")
+            encoder.requires_grad_ = False
+        
+        return encoder
+            
+

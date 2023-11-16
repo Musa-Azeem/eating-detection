@@ -19,6 +19,8 @@ from lib.models import  ConvAutoencoder, EncoderClassifier
 from tqdm import tqdm
 import plotly.express as px
 from tabulate import tabulate
+import numpy as np
+from sklearn.model_selection import train_test_split
 
 
 raw_dir = Path("/home/musa/datasets/nursingv1")
@@ -26,8 +28,12 @@ label_dir = Path("/home/musa/datasets/eating_labels")
 WINSIZE = 101
 DEVICE = 'cuda:1'
 
-train_sessions = [25, 67, 42, 50, 22, 61, 33, 21, 16, 18]
-test_sessions = [58, 62]
+all_sessions = set(range(71))
+not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 34, 70}
+reserved = {15, 43, 45, 51, 55}
+sessions = list(all_sessions - not_labeled - reserved)
+np.random.seed(10)
+train_sessions, test_sessions = train_test_split(sessions, test_size=0.25)
 
 Xs = []
 ys = []
@@ -53,12 +59,11 @@ for session_idx in test_sessions:
 Xte = torch.cat(Xs)
 yte = torch.cat(ys)
 
-ae_model = ConvAutoencoder(winsize=WINSIZE)
-ae_model.load_state_dict(torch.load('dev/autoencoder2/best_model-39.pt'))
-model = EncoderClassifier(ae_model).to(DEVICE)
+model = EncoderClassifier(WINSIZE, weights_file='dev/autoencoder3/best_model.pt', freeze=True).to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 criterion = nn.BCEWithLogitsLoss()
 
 trainloader = DataLoader(TensorDataset(Xtr, ytr), batch_size=64, shuffle=True)
 testloader = DataLoader(TensorDataset(Xte,yte), batch_size=64)
-optimization_loop(model, trainloader, testloader, criterion, optimizer, 50, DEVICE, Path('dev/encoderclass2'))
+
+optimization_loop(model, trainloader, testloader, criterion, optimizer, 100, DEVICE, Path('dev/encoderclass3'))
