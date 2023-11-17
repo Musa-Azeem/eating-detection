@@ -295,7 +295,7 @@ class ConvAutoencoderImproved(nn.Module):
         return x.flatten(start_dim=1)
 
 
-class EncoderClassifier(nn.Module):
+class EncoderClassifierImproved(nn.Module):
     def __init__(self, winsize, weights_file=None, freeze=False):
         super().__init__()
 

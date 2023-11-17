@@ -19,7 +19,6 @@ from tqdm import tqdm
 import plotly.express as px
 import os
 
-
 # =============================================================================
 # =================== Nursing Data Loading and Processing =====================
 # =============================================================================
@@ -297,8 +296,107 @@ def optimization_loop(
         plt.close()
 
 
+# =============================================================================
+# ============================ Autoencoder ====================================
+# =============================================================================
 
+# Warning - this function is not made to be used with TensorDatasets (they return a tuple)
+def optimization_loop_xonly(
+    model: nn.Module,
+    trainloader: DataLoader,
+    devloader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer, 
+    epochs: int,
+    device: str,
+    outdir: Path = None,
+):
+    if outdir:
+        model_outdir = outdir / 'model'
+        model_outdir.mkdir(parents=True)
+        info_file = Path(outdir / 'info.txt')
+        with info_file.open('w') as f:
+            f.write("Best Model: ")
+            
 
+    train_loss = []
+    dev_loss = []
+
+    lowest_loss = -1
+
+    pbar = tqdm(range(epochs))
+    for epoch in pbar:
+
+        # Train Loop
+        train_lossi = inner_train_loop_xonly(model, trainloader, criterion, optimizer, device)
+        train_loss.append(sum(train_lossi) / len(trainloader))            
+
+        # Dev Loop
+        dev_lossi = inner_evaluate_loop_xonly(model, devloader, criterion, device)
+        dev_loss.append(sum(dev_lossi) / len(devloader))
+
+        pbar.set_description(f'Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
+
+        # Plot loss
+        plt.plot(train_loss)
+        plt.plot(dev_loss)
+        plt.savefig('running_loss.jpg')
+
+        if outdir:
+            torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
+            plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'))
+
+            # Save model with lowest loss
+            if lowest_loss < 0 or dev_loss[-1] < lowest_loss:
+                lowest_loss = dev_loss[-1]
+                torch.save(model.state_dict(), outdir / f'best_model.pt')
+                with info_file.open('w') as f:
+                    f.write(f"Best Model: {epoch}") 
+        plt.close()
+
+def inner_train_loop_xonly(
+    model: nn.Module,
+    trainloader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    device: str,
+) -> list[float]:
+
+    model.train()
+    lossi = []
+    for Xtr in trainloader:
+        Xtr = Xtr.to(device)
+
+        # Forward pass
+        logits = model(Xtr)
+        loss = criterion(logits, Xtr)
+
+        # Backward pass
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        lossi.append(loss.item())
+    
+    return lossi
+
+def inner_evaluate_loop_xonly(
+    model: nn.Module,
+    devloader: DataLoader,
+    criterion: nn.Module,
+    device: str
+) -> tuple[torch.Tensor, torch.Tensor, list[float]]:
+
+    all_confs = []
+    dev_lossi = []
+
+    model.eval()
+    for X in devloader:
+        X = X.to(device)
+        logits = model(X)
+        dev_lossi.append(criterion(logits, X).item())
+
+    return dev_lossi
 
 # =============================================================================
 # ================================ Misc =======================================
