@@ -4,15 +4,15 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from torch.utils.data import TensorDataset, DataLoader
 from lib.modules import optimization_loop
-from lib.models import  ConvAutoencoderImproved, EncoderClassifierImproved
+from lib.models import  ConvAutoencoderImproved, ConvEncoderClassifierImproved
 
 WINSIZE = 101
-DEVICE = 'cuda:0'
+DEVICE = 'cuda:1'
 autoencoder_dir = Path('dev/autoencoder4')
-encoderclass_dir = Path('dev/encoderclass4')
+encoderclass_dir = Path('dev/encoderclass4-conv')
 epochs = 100
 
-model = EncoderClassifierImproved(WINSIZE, weights_file=autoencoder_dir / 'best_model.pt', freeze=True).to(DEVICE)
+model = ConvEncoderClassifierImproved(WINSIZE, weights_file=autoencoder_dir / 'best_model.pt', freeze=True).to(DEVICE)
 optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 criterion = nn.BCEWithLogitsLoss()
 

@@ -329,8 +329,48 @@ class EncoderClassifierImproved(nn.Module):
 
         if self.freeze:
             print("Model is freezing encoder")
-            encoder.requires_grad_ = False
+            for p in encoder.parameters():
+                p.requires_grad = False
         
         return encoder
-            
+    
 
+class ConvEncoderClassifierImproved(nn.Module):
+    def __init__(self, winsize, weights_file=None, freeze=False):
+        super().__init__()
+
+        self.winsize = winsize
+        self.weights_file = weights_file
+        self.freeze = freeze
+
+        self.encoder = self.get_encoder()
+        
+        self.classifier = nn.Sequential(
+            nn.Conv1d(in_channels=4, out_channels=4, kernel_size=5, stride=1, padding=2), # Nx4x11 -> Nx4x11
+            nn.ReLU(),
+            nn.Conv1d(in_channels=4, out_channels=1, kernel_size=5, stride=1, padding=2), # Nx4x11 -> Nx1x11
+            nn.ReLU(),
+            nn.AvgPool1d(kernel_size=11)
+        )
+
+    def forward(self, x):
+        x = x.view(-1,3,self.winsize)
+        x = self.encoder(x)
+        x = self.classifier(x)
+        return x.squeeze(1)
+
+    def get_encoder(self):
+        autoencoder = ConvAutoencoderImproved(self.winsize)
+
+        if self.weights_file:
+            print("Model is loading pretrained encoder")
+            autoencoder.load_state_dict(torch.load(self.weights_file))
+        
+        encoder = autoencoder.encoder
+
+        if self.freeze:
+            print("Model is freezing encoder")
+            for p in encoder.parameters():
+                p.requires_grad = False
+        
+        return encoder
