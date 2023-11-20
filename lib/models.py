@@ -390,3 +390,11 @@ class ConvEncoderClassifierImproved(nn.Module):
 # =============================================================================
 
 # Skip Connection autoencoder models
+
+# class ResNetAutoencoder(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+
+
+#     def forward(x):
+#         return x
