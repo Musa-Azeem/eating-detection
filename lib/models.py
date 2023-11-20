@@ -220,6 +220,11 @@ class LinearAutoencoder(nn.Module):
         x = self.decoder(x)
         return x
 
+
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
 class ConvAutoencoder(nn.Module):
     def __init__(self, winsize):
         super().__init__()
@@ -261,6 +266,10 @@ class EncoderClassifier(nn.Module):
         x = self.classifier(x)
         return x
     
+
+# =============================================================================
+# =============================================================================
+# =============================================================================
 
 
 class ConvAutoencoderImproved(nn.Module):
@@ -348,16 +357,17 @@ class ConvEncoderClassifierImproved(nn.Module):
         self.classifier = nn.Sequential(
             nn.Conv1d(in_channels=4, out_channels=4, kernel_size=5, stride=1, padding=2), # Nx4x11 -> Nx4x11
             nn.ReLU(),
-            nn.Conv1d(in_channels=4, out_channels=1, kernel_size=5, stride=1, padding=2), # Nx4x11 -> Nx1x11
+            nn.Flatten(start_dim=1), # Nx4x11 -> Nx44
+            nn.Linear(in_features=44, out_features=100), # Nx44 -> Nx11
             nn.ReLU(),
-            nn.AvgPool1d(kernel_size=11)
+            nn.Linear(in_features=100, out_features=1) # Nx11 -> Nx1
         )
 
     def forward(self, x):
         x = x.view(-1,3,self.winsize)
         x = self.encoder(x)
         x = self.classifier(x)
-        return x.squeeze(1)
+        return x
 
     def get_encoder(self):
         autoencoder = ConvAutoencoderImproved(self.winsize)
@@ -374,3 +384,9 @@ class ConvEncoderClassifierImproved(nn.Module):
                 p.requires_grad = False
         
         return encoder
+
+# =============================================================================
+# =============================================================================
+# =============================================================================
+
+# Skip Connection autoencoder models

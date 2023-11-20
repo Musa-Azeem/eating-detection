@@ -258,8 +258,12 @@ def optimization_loop(
     outdir: Path = None,
 ):
     if outdir:
+        outdir = Path(outdir)
         model_outdir = outdir / 'model'
         model_outdir.mkdir(parents=True)
+        info_file = Path(outdir / 'info.txt')
+        with info_file.open('w') as f:
+            f.write("Best Model: ")
 
     train_loss = []
     dev_loss = []
@@ -292,7 +296,8 @@ def optimization_loop(
             if lowest_loss < 0 or dev_loss[-1] < lowest_loss:
                 lowest_loss = dev_loss[-1]
                 torch.save(model.state_dict(), outdir / f'best_model.pt')
-                os.system(f'touch {outdir / str(epoch)}.txt') 
+                with info_file.open('w') as f:
+                    f.write(f"Best Model: {epoch}\nLoss: {dev_loss[-1]}")  
         plt.close()
 
 
@@ -351,7 +356,7 @@ def optimization_loop_xonly(
                 lowest_loss = dev_loss[-1]
                 torch.save(model.state_dict(), outdir / f'best_model.pt')
                 with info_file.open('w') as f:
-                    f.write(f"Best Model: {epoch}") 
+                    f.write(f"Best Model: {epoch}\nLoss: {dev_loss[-1]}")  
         plt.close()
 
 def inner_train_loop_xonly(
