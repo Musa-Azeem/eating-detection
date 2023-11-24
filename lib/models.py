@@ -389,12 +389,95 @@ class ConvEncoderClassifierImproved(nn.Module):
 # =============================================================================
 # =============================================================================
 
-# Skip Connection autoencoder models
+class ResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, padding, seq_len):
+        super().__init__()
+        self.c = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=padding),
+            nn.LayerNorm((out_channels, seq_len)),
+            nn.ReLU(),
+            nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, padding=padding),
+            nn.LayerNorm((out_channels, seq_len)),
+            nn.ReLU(),
+            nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, padding=padding),
+            nn.LayerNorm((out_channels, seq_len)),
+            nn.ReLU()
+        )
+        self.identity = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=1),
+            nn.LayerNorm((out_channels, seq_len))
+        )
+        self.relu = nn.ReLU()
 
-# class ResNetAutoencoder(nn.Module):
-#     def __init__(self):
-#         super().__init__()
+    def forward(self, x):
+        return self.relu(self.identity(x) + self.c(x))
 
+class ResAutoEncoder(nn.Module):
+    def __init__(self, winsize, in_channels):
+        super().__init__()
+        self.winsize = winsize
+        self.in_channels = in_channels
 
-#     def forward(x):
-#         return x
+        self.encoder = nn.Sequential(
+            ResBlock(in_channels, 16, 15, 7, winsize), # Nx3x101
+            nn.MaxPool1d(kernel_size=3, stride=3), # Nx16x33
+            ResBlock(16, 8, 9, 4, 33), # Nx8x33
+            nn.MaxPool1d(kernel_size=3, stride=3), # Nx8x11
+            ResBlock(8, 4, 5, 2, 11), # Nx4x11
+        )
+
+        self.decoder = nn.Sequential(
+            ResBlock(4, 8, 5, 2, 11), # Nx8x11
+            nn.Upsample(scale_factor=3, mode='nearest'), # Nx8x33
+            ResBlock(8, 16, 9, 4, 33), # Nx16x33
+            nn.Upsample(scale_factor=3.09, mode='nearest'), # Nx16x101
+            ResBlock(16, 3, 15, 7, 101) # Nx3x101
+        )
+
+    def forward(self, x):
+        x = x.view(-1, self.in_channels, self.winsize)
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x.flatten(start_dim=1)
+
+class ResEncoderClassifier(nn.Module):
+    def __init__(self, winsize, weights_file=None, freeze=False):
+        super().__init__()
+
+        self.winsize = winsize
+        self.weights_file = weights_file
+        self.freeze = freeze
+
+        self.encoder = self.get_encoder()
+        
+        self.classifier = nn.Sequential(
+            nn.Conv1d(in_channels=4, out_channels=4, kernel_size=5, stride=1, padding=2), # Nx4x11 -> Nx4x11
+            nn.ReLU(),
+            nn.LayerNorm((4, 11)),
+            nn.Flatten(start_dim=1), # Nx4x11 -> Nx44
+            nn.Linear(in_features=44, out_features=100), # Nx44 -> Nx11
+            nn.ReLU(),
+            nn.Linear(in_features=100, out_features=1) # Nx11 -> Nx1
+        )
+
+    def forward(self, x):
+        x = x.view(-1,3,self.winsize)
+        x = self.encoder(x)
+        x = self.classifier(x)
+        return x
+
+    def get_encoder(self):
+        autoencoder = ConvAutoencoderImproved(self.winsize)
+
+        if self.weights_file:
+            print("Model is loading pretrained encoder")
+            autoencoder.load_state_dict(torch.load(self.weights_file))
+        
+        encoder = autoencoder.encoder
+
+        if self.freeze:
+            print("Model is freezing encoder")
+            for p in encoder.parameters():
+                p.requires_grad = False
+        
+        return encoder
