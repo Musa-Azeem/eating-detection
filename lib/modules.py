@@ -255,6 +255,8 @@ def optimization_loop(
     optimizer: torch.optim.Optimizer, 
     epochs: int,
     device: str,
+    patience: int = None,
+    min_delta: float = 0.0001,
     outdir: Path = None,
 ):
     if outdir:
@@ -268,10 +270,12 @@ def optimization_loop(
     train_loss = []
     dev_loss = []
 
-    lowest_loss = -1
+    lowest_loss = float('inf')
+    early_stop_counter = 0
 
     pbar = tqdm(range(epochs))
     for epoch in pbar:
+        lower = False
 
         # Train Loop
         train_lossi = inner_train_loop(model, trainloader, criterion, optimizer, device)
@@ -288,17 +292,35 @@ def optimization_loop(
         plt.plot(dev_loss)
         plt.savefig('running_loss.jpg')
 
+        # Early Stopping
+        if (lowest_loss - dev_loss[-1]) > min_delta:
+            # Sig diff, reset counter
+            early_stop_counter = 0
+        else:
+            # Not a sig diff, increment counter
+            early_stop_counter += 1
+
+        # Save lowest loss
+        if dev_loss[-1] < lowest_loss:
+            lower = True
+            lowest_loss = dev_loss[-1]
+        
         if outdir:
             torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
             plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'))
 
             # Save model with lowest loss
-            if lowest_loss < 0 or dev_loss[-1] < lowest_loss:
-                lowest_loss = dev_loss[-1]
+            if lower:
                 torch.save(model.state_dict(), outdir / f'best_model.pt')
                 with info_file.open('w') as f:
-                    f.write(f"Best Model: {epoch}\nLoss: {dev_loss[-1]}")  
+                    f.write(f"Best Model: {epoch}\nLoss: {lowest_loss}")  
         plt.close()
+
+        # If we run out of patience, stop
+        if patience and early_stop_counter >= patience:
+            print(f'Early stopping at epoch {epoch}')
+            break
+        
 
 
 # =============================================================================
@@ -314,6 +336,8 @@ def optimization_loop_xonly(
     optimizer: torch.optim.Optimizer, 
     epochs: int,
     device: str,
+    patience: int = None,
+    min_delta: float = 0.0001,
     outdir: Path = None,
 ):
     if outdir:
@@ -327,10 +351,14 @@ def optimization_loop_xonly(
     train_loss = []
     dev_loss = []
 
+    lowest_loss = float('inf')
+    early_stop_counter = 0
+
     lowest_loss = -1
 
     pbar = tqdm(range(epochs))
     for epoch in pbar:
+        lower = False
 
         # Train Loop
         train_lossi = inner_train_loop_xonly(model, trainloader, criterion, optimizer, device)
@@ -347,17 +375,35 @@ def optimization_loop_xonly(
         plt.plot(dev_loss)
         plt.savefig('running_loss.jpg')
 
+        # Early Stopping
+        if (lowest_loss - dev_loss[-1]) > min_delta:
+            # Sig diff, reset counter
+            early_stop_counter = 0
+        else:
+            # Not a sig diff, increment counter
+            early_stop_counter += 1
+
+        # Save lowest loss
+        if dev_loss[-1] < lowest_loss:
+            lower = True
+            lowest_loss = dev_loss[-1]
+
         if outdir:
             torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
             plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'))
 
             # Save model with lowest loss
-            if lowest_loss < 0 or dev_loss[-1] < lowest_loss:
-                lowest_loss = dev_loss[-1]
+            if lower:
                 torch.save(model.state_dict(), outdir / f'best_model.pt')
                 with info_file.open('w') as f:
-                    f.write(f"Best Model: {epoch}\nLoss: {dev_loss[-1]}")  
+                    f.write(f"Best Model: {epoch}\nLoss: {lowest_loss}")   
         plt.close()
+
+        # If we run out of patience, stop
+        if patience and early_stop_counter >= patience:
+            print(f'Early stopping at epoch {epoch}')
+            break
+
 
 def inner_train_loop_xonly(
     model: nn.Module,
