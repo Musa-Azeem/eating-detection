@@ -467,7 +467,7 @@ class ResEncoderClassifier(nn.Module):
         return x
 
     def get_encoder(self):
-        autoencoder = ConvAutoencoderImproved(self.winsize)
+        autoencoder = ResAutoEncoder(self.winsize, 3)
 
         if self.weights_file:
             print("Model is loading pretrained encoder")
