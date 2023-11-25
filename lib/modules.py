@@ -258,6 +258,7 @@ def optimization_loop(
     patience: int = None,
     min_delta: float = 0.0001,
     outdir: Path = None,
+    label: str = ''
 ):
     if outdir:
         outdir = Path(outdir)
@@ -285,7 +286,7 @@ def optimization_loop(
         y_true, y_pred, confs, dev_lossi = inner_evaluate_loop(model, devloader, criterion, device)
         dev_loss.append(sum(dev_lossi) / len(devloader))
 
-        pbar.set_description(f'Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
+        pbar.set_description(f'{label}: Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
 
         # Plot loss
         plt.plot(train_loss)
@@ -339,6 +340,7 @@ def optimization_loop_xonly(
     patience: int = None,
     min_delta: float = 0.0001,
     outdir: Path = None,
+    label: str = ''
 ):
     if outdir:
         model_outdir = outdir / 'model'
@@ -354,8 +356,6 @@ def optimization_loop_xonly(
     lowest_loss = float('inf')
     early_stop_counter = 0
 
-    lowest_loss = -1
-
     pbar = tqdm(range(epochs))
     for epoch in pbar:
         lower = False
@@ -368,7 +368,7 @@ def optimization_loop_xonly(
         dev_lossi = inner_evaluate_loop_xonly(model, devloader, criterion, device)
         dev_loss.append(sum(dev_lossi) / len(devloader))
 
-        pbar.set_description(f'Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
+        pbar.set_description(f'{label}: Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
 
         # Plot loss
         plt.plot(train_loss)
