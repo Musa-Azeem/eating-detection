@@ -2,23 +2,23 @@
 
 # Train autoencoder
 
-ae_args="epochs=1, outdir='dev2/5_autoencoder-resnet', device='cuda:0', label='ResNet Autoencoder'"
+ae_args="epochs=100, outdir='dev2/5_autoencoder-resnet', device='cuda:0', label='ResNet Autoencoder'"
 
 env/bin/python3 -c "from lib.run import train_autoencoder; train_autoencoder($ae_args)"
 
 # Train classifier in 4 ways
 
 # 1. Train classifier with pretrained, frozen encoder
-class1_args="epochs=1, outdir='dev2/5_encoderclass-resnet_1-pretrained-frozen', device='cuda:0', autoencoder_dir='dev2/5_autoencoder-resnet', freeze=True, label='1. Pretrained, frozen encoder'"
+class1_args="epochs=100, outdir='dev2/5_encoderclass-resnet_1-pretrained-frozen', device='cuda:0', autoencoder_dir='dev2/5_autoencoder-resnet', freeze=True, label='1. Pretrained, frozen encoder'"
 
 # 2. Train classifier with pretrained, unfrozen encoder
-class2_args="epochs=1, outdir='dev2/5_encoderclass-resnet_2-pretrained-unfrozen', device='cuda:1', autoencoder_dir='dev2/5_autoencoder-resnet', freeze=False, label='2. Pretrained, unfrozen encoder'"
+class2_args="epochs=100, outdir='dev2/5_encoderclass-resnet_2-pretrained-unfrozen', device='cuda:1', autoencoder_dir='dev2/5_autoencoder-resnet', freeze=False, label='2. Pretrained, unfrozen encoder'"
 
 # 3. Train classifier with untrained, frozen encoder
-class3_args="epochs=1, outdir='dev2/5_encoderclass-resnet_3-untrained-frozen', device='cuda:0', autoencoder_dir=None, freeze=True, label='3. Untrained, frozen encoder'"
+class3_args="epochs=100, outdir='dev2/5_encoderclass-resnet_3-untrained-frozen', device='cuda:0', autoencoder_dir=None, freeze=True, label='3. Untrained, frozen encoder'"
 
 # 4. Train classifier with untrained, unfrozen encoder
-class4_args="epochs=1, outdir='dev2/5_encoderclass-resnet_4-untrained-unfrozen', device='cuda:1', autoencoder_dir=None, freeze=False, label='4. Untrained, unfrozen encoder'"
+class4_args="epochs=100, outdir='dev2/5_encoderclass-resnet_4-untrained-unfrozen', device='cuda:1', autoencoder_dir=None, freeze=False, label='4. Untrained, unfrozen encoder'"
 
 # Train first two
 python3 -c "from lib.run import train_encoderclassifier; train_encoderclassifier($class1_args)" &

@@ -45,18 +45,14 @@ def pipeline():
 def train_autoencoder(epochs, outdir, device, label=''):
     WINSIZE = 101
     DEVICE = device
-    RAW_DIR = Path('/home/musa/datasets/eating_raw/')
     autoencoder_dir = Path(outdir)
 
     model = ResAutoEncoder(winsize=WINSIZE, in_channels=3).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
     criterion = nn.MSELoss()
 
-    # trainloader = torch.load('pytorch_datasets/trainloader_11-16-23.pt')
-    # testloader = torch.load('pytorch_datasets/testloader_11-16-23.pt')
-
-    trainloader = torch.load('pytorch_datasets/trainloader-test.pt')
-    testloader = torch.load('pytorch_datasets/testloader-test.pt')
+    trainloader = torch.load('pytorch_datasets/trainloader_11-25-23.pt')
+    testloader = torch.load('pytorch_datasets/testloader_11-25-23.pt')
 
     optimization_loop_xonly(
         model, 
@@ -78,11 +74,8 @@ def train_encoderclassifier(epochs, outdir, device, autoencoder_dir=None, freeze
     autoencoder_dir = Path(autoencoder_dir) if autoencoder_dir else None
     encoderclass_dir = Path(outdir)
 
-    # nursing_trainloader = torch.load('pytorch_datasets/nursing_trainloader_11-16-23.pt')
-    # nursing_testloader = torch.load('pytorch_datasets/nursing_testloader_11-16-23.pt')
-
-    nursing_trainloader = torch.load('pytorch_datasets/nursing_trainloader-test.pt')
-    nursing_testloader = torch.load('pytorch_datasets/nursing_testloader-test.pt')
+    nursing_trainloader = torch.load('pytorch_datasets/nursing_trainloader_11-25-23.pt')
+    nursing_testloader = torch.load('pytorch_datasets/nursing_testloader_11-25-23.pt')
 
     model = ResEncoderClassifier(
         WINSIZE, 

@@ -412,6 +412,32 @@ class ResBlock(nn.Module):
     def forward(self, x):
         return self.relu(self.identity(x) + self.c(x))
 
+class DecoderResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, padding, seq_len, use_relu=True):
+        super().__init__()
+        self.use_relu = use_relu
+        self.c = nn.Sequential(
+            nn.ConvTranspose1d(in_channels, out_channels, kernel_size=kernel_size, padding=padding),
+            nn.LayerNorm((out_channels, seq_len)),
+            nn.ReLU(),
+            nn.ConvTranspose1d(out_channels, out_channels, kernel_size=kernel_size, padding=padding),
+            nn.LayerNorm((out_channels, seq_len)),
+            nn.ReLU(),
+            nn.ConvTranspose1d(out_channels, out_channels, kernel_size=kernel_size, padding=padding),
+            nn.LayerNorm((out_channels, seq_len)),
+        )
+        if use_relu:
+            self.c.add_module('relu', nn.ReLU())
+        
+        self.identity = nn.Sequential(
+            nn.ConvTranspose1d(in_channels, out_channels, kernel_size=1),
+            nn.LayerNorm((out_channels, seq_len))
+        )
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        return self.relu(self.identity(x) + self.c(x)) if self.use_relu else self.identity(x) + self.c(x)
+
 class ResAutoEncoder(nn.Module):
     def __init__(self, winsize, in_channels):
         super().__init__()
@@ -427,11 +453,11 @@ class ResAutoEncoder(nn.Module):
         )
 
         self.decoder = nn.Sequential(
-            ResBlock(4, 8, 5, 2, 11), # Nx8x11
+            DecoderResBlock(4, 8, 5, 2, 11), # Nx8x11
             nn.Upsample(scale_factor=3, mode='nearest'), # Nx8x33
-            ResBlock(8, 16, 9, 4, 33), # Nx16x33
+            DecoderResBlock(8, 16, 9, 4, 33), # Nx16x33
             nn.Upsample(scale_factor=3.09, mode='nearest'), # Nx16x101
-            ResBlock(16, 3, 15, 7, 101) # Nx3x101
+            DecoderResBlock(16, 3, 15, 7, 101, use_relu=False) # Nx3x101
         )
 
     def forward(self, x):
