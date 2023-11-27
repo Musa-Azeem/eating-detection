@@ -314,3 +314,42 @@ class ResEncoderClassifier(nn.Module):
         
         return encoder
 
+class ResEncoderClassifierAve(nn.Module):
+    def __init__(self, winsize, weights_file=None, freeze=False):
+        super().__init__()
+
+        self.winsize = winsize
+        self.weights_file = weights_file
+        self.freeze = freeze
+
+        self.encoder = self.get_encoder()
+
+        self.classifier = nn.Sequential(
+            nn.AveragePool1d(kernel_size=11), # Nx4x11 -> Nx4x1
+            nn.Flatten(start_dim=1), # Nx4x1 -> Nx4
+            nn.Linear(in_features=4, out_features=100),
+            nn.ReLU(),
+            nn.Linear(in_features=100, out_features=1)
+        )
+        
+    def forward(self, x):
+        x = x.view(-1,3,self.winsize)
+        x = self.encoder(x)
+        x = self.classifier(x)
+        return x
+    
+    def get_encoder(self):
+        autoencoder = ResAutoEncoder(self.winsize, 3)
+
+        if self.weights_file:
+            print("Model is loading pretrained encoder")
+            autoencoder.load_state_dict(torch.load(self.weights_file))
+        
+        encoder = autoencoder.encoder
+
+        if self.freeze:
+            print("Model is freezing encoder")
+            for p in encoder.parameters():
+                p.requires_grad = False
+        
+        return encoder
