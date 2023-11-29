@@ -3,9 +3,10 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 from torch.utils.data import TensorDataset, DataLoader
-from lib.models import MLP2hl, ResAutoEncoder, ResEncoderClassifier
-from lib.modules import optimization_loop_xonly, optimization_loop
-from lib.utils import plot_and_save_losses
+from lib.models import MLP2hl, ResAutoEncoder, ResEncoderClassifier, ResEncoderClassifierAve
+from lib.modules import optimization_loop_xonly, optimization_loop, pad_for_windowing, window_session, evaluate_loop
+from lib.utils import plot_and_save_losses, plot_and_save_cm, summary
+from datetime import datetime
 
 def pipeline():
     WINSIZE = 101
@@ -78,6 +79,37 @@ def train_encoderclassifier(epochs, outdir, device, autoencoder_dir=None, freeze
     nursing_testloader = torch.load('pytorch_datasets/nursing_testloader_11-25-23.pt')
 
     model = ResEncoderClassifier(
+        WINSIZE, 
+        weights_file=autoencoder_dir / 'best_model.pt' if autoencoder_dir else None, 
+        freeze=freeze
+    ).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    criterion = nn.BCEWithLogitsLoss()
+
+    optimization_loop(
+        model, 
+        nursing_trainloader, 
+        nursing_testloader, 
+        criterion, optimizer, 
+        epochs, 
+        DEVICE, 
+        patience=20,
+        min_delta=0.0001,
+        outdir=encoderclass_dir,
+        label=label
+    )
+
+
+def train_encoderclassifier_avgpool(epochs, outdir, device, autoencoder_dir=None, freeze=True, label=''):
+    WINSIZE = 101
+    DEVICE = device
+    autoencoder_dir = Path(autoencoder_dir) if autoencoder_dir else None
+    encoderclass_dir = Path(outdir)
+
+    nursing_trainloader = torch.load('pytorch_datasets/nursing_trainloader_11-25-23.pt')
+    nursing_testloader = torch.load('pytorch_datasets/nursing_testloader_11-25-23.pt')
+
+    model = ResEncoderClassifierAve(
         WINSIZE, 
         weights_file=autoencoder_dir / 'best_model.pt' if autoencoder_dir else None, 
         freeze=freeze

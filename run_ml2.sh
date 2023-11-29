@@ -20,10 +20,10 @@ class3_args="epochs=100, outdir='dev3/5_encoderclass-resnet_3-untrained-frozen',
 # 4. Train classifier with untrained, unfrozen encoder
 class4_args="epochs=100, outdir='dev3/5_encoderclass-resnet_4-untrained-unfrozen', device='cuda:1', autoencoder_dir=None, freeze=False, label='4. Untrained, unfrozen encoder'"
 
-# Train first two
-env/bin/python3 -c "from lib.run import train_encoderclassifier; train_encoderclassifier($class1_args)" &
-env/bin/python3 -c "from lib.run import train_encoderclassifier; train_encoderclassifier($class2_args)" &
-wait
+# # Train first two
+# env/bin/python3 -c "from lib.run import train_encoderclassifier; train_encoderclassifier($class1_args)" &
+# env/bin/python3 -c "from lib.run import train_encoderclassifier; train_encoderclassifier($class2_args)" &
+# wait
 
 # Train last two
 env/bin/python3 -c "from lib.run import train_encoderclassifier; train_encoderclassifier($class3_args)" &
