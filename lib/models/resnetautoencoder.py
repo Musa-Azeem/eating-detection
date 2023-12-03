@@ -62,7 +62,7 @@ class ResAutoEncoder(nn.Module):
         self.in_channels = in_channels
 
         self.encoder = nn.Sequential(
-            ResBlock(in_channels, 16, 15, 7, winsize), # Nx3x101
+            ResBlock(in_channels, 16, 15, 7, winsize), # Nx16x101
             nn.MaxPool1d(kernel_size=3, stride=3), # Nx16x33
             ResBlock(16, 8, 9, 4, 33), # Nx8x33
             nn.MaxPool1d(kernel_size=3, stride=3), # Nx8x11

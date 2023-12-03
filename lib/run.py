@@ -93,7 +93,7 @@ def train_encoderclassifier(epochs, outdir, device, autoencoder_dir=None, freeze
         criterion, optimizer, 
         epochs, 
         DEVICE, 
-        patience=20,
+        patience=30,
         min_delta=0.0001,
         outdir=encoderclass_dir,
         label=label
@@ -124,7 +124,7 @@ def train_encoderclassifier_avgpool(epochs, outdir, device, autoencoder_dir=None
         criterion, optimizer, 
         epochs, 
         DEVICE, 
-        patience=20,
+        patience=30,
         min_delta=0.0001,
         outdir=encoderclass_dir,
         label=label
