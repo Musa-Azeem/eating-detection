@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 from torch.utils.data import TensorDataset, DataLoader
-from lib.models import MLP2hl, ResAutoEncoder, ResEncoderClassifier, ResEncoderClassifierAve
+from lib.models import MLP2hl, ResAutoEncoder, ResEncoderClassifier, ResEncoderClassifierAve, BiggerResNetAE
 from lib.modules import optimization_loop_xonly, optimization_loop, pad_for_windowing, window_session, evaluate_loop
 from lib.utils import plot_and_save_losses, plot_and_save_cm, summary
 from datetime import datetime
@@ -127,5 +127,30 @@ def train_encoderclassifier_avgpool(epochs, outdir, device, autoencoder_dir=None
         patience=30,
         min_delta=0.0001,
         outdir=encoderclass_dir,
+        label=label
+    )
+
+def train_autoencoder_6(epochs, outdir, device, label=''):
+    DEVICE = device
+    autoencoder_dir = Path(outdir)
+
+    model = BiggerResNetAE(in_channels=3).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    criterion = nn.MSELoss()
+
+    trainloader = torch.load('pytorch_datasets/trainloader_12-5-23.pt')
+    testloader = torch.load('pytorch_datasets/testloader_12-5-23.pt')
+
+    optimization_loop_xonly(
+        model, 
+        trainloader, 
+        testloader, 
+        criterion, 
+        optimizer, 
+        epochs, 
+        DEVICE, 
+        patience=20,
+        min_delta=0.0001,
+        outdir=autoencoder_dir,
         label=label
     )
