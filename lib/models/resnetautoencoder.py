@@ -138,9 +138,9 @@ class ResEncoderClassifierAve(nn.Module):
         self.classifier = nn.Sequential(
             nn.AvgPool1d(kernel_size=11), # Nx4x11 -> Nx4x1
             nn.Flatten(start_dim=1), # Nx4x1 -> Nx4
-            nn.Linear(in_features=4, out_features=50),
+            nn.Linear(in_features=4, out_features=100),
             nn.ReLU(),
-            nn.Linear(in_features=50, out_features=1)
+            nn.Linear(in_features=100, out_features=1)
         )
         
     def forward(self, x):
