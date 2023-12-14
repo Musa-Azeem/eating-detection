@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 from torch.utils.data import TensorDataset, DataLoader
-from lib.models import MLP2hl, ResAutoEncoder, ResEncoderClassifier, ResEncoderClassifierAve, BiggerResNetAE
+from lib.models import MLP2hl, ResAutoEncoder, ResEncoderClassifier, ResEncoderClassifierAve, BiggerResNetAE, ResNetClassifier
 from lib.modules import optimization_loop_xonly, optimization_loop, pad_for_windowing, window_session, evaluate_loop
 from lib.utils import plot_and_save_losses, plot_and_save_cm, summary
 from datetime import datetime
@@ -41,6 +41,31 @@ def pipeline():
 
     torch.save(ys['pred'], 'pred.pt')
     pd.DataFrame({'pred': ys['pred'].flatten().numpy()}).to_csv('pred.csv', index=False)
+
+def train_resnet(epochs, outdir, device, label=''):
+    WINSIZE = 101
+    DEVICE = device
+
+    model = ResNetClassifier(winsize=WINSIZE, in_channels=3).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    criterion = nn.BCEWithLogitsLoss()
+
+    nursing_trainloader = torch.load('pytorch_datasets/nursing_trainloader_11-25-23.pt')
+    nursing_testloader = torch.load('pytorch_datasets/nursing_testloader_11-25-23.pt')
+
+    optimization_loop(
+        model, 
+        nursing_trainloader, 
+        nursing_testloader, 
+        criterion, 
+        optimizer, 
+        epochs, 
+        DEVICE, 
+        patience=30,
+        min_delta=0.0001,
+        outdir=outdir,
+        label=label
+    )
 
 
 def train_autoencoder(epochs, outdir, device, label=''):
@@ -149,8 +174,8 @@ def train_autoencoder_6(epochs, outdir, device, label=''):
         optimizer, 
         epochs, 
         DEVICE, 
-        patience=20,
-        min_delta=0.0001,
+        patience=10,
+        min_delta=0.001,
         outdir=autoencoder_dir,
         label=label
     )

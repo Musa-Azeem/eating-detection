@@ -1,5 +1,6 @@
 from torch import nn
 import torch
+from . import ResBlock
 
 class MLP(nn.Module):
     def __init__(self, n_hl, winsize):
@@ -101,91 +102,117 @@ class LSTM(nn.Module):
 
 
 class ResNetClassifier(nn.Module):
-    def __init__(self, in_channels, winsize):
+    def __init__(self, winsize, in_channels):
         super().__init__()
         self.winsize = winsize
+        self.in_channels = in_channels
 
-        self.resnet_conv = ResNetConv(in_channels=in_channels, winsize=self.winsize)
-        # Global Pooling and output
-        self.gp = nn.AvgPool1d(kernel_size=self.winsize)    # Take mean across each feature map (N, C, L) => (N,C)
-        self.output = nn.Linear(in_features=5, out_features=1)
-
-    def forward(self, x):
-        # Run convolutional layers of ResNet
-        y = self.resnet_conv(x)
-
-        # Run Global pooling and classifier
-        y = self.gp(y).squeeze(2)
-        logits = self.output(y)
-        return logits
-
-
-class ResNetConv(nn.Module):
-    def conv_block(self, in_channels, out_channels, kernel_size, use_relu=True):
-        if use_relu:
-            return nn.Sequential(
-                nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding='same'),
-                nn.BatchNorm1d(num_features=out_channels),
-                nn.ReLU()
-            )
-        else:
-            return nn.Sequential(
-                nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding='same'),
-                nn.BatchNorm1d(num_features=out_channels)
-            )
-    
-    def inner_res_block(self, in_channels, out_channels):
-        return nn.Sequential(
-            self.conv_block(in_channels=in_channels, out_channels=out_channels, kernel_size=8),
-            self.conv_block(in_channels=out_channels, out_channels=out_channels, kernel_size=5),
-            self.conv_block(in_channels=out_channels, out_channels=out_channels, kernel_size=3, use_relu=False)
+        self.r = nn.Sequential(
+            ResBlock(in_channels, 32, 9, 4, winsize), # Nx32x101
+            nn.MaxPool1d(kernel_size=3, stride=3), # Nx32x33
+            ResBlock(32, 16, 3, 1, 33), # Nx16x33
+            nn.MaxPool1d(kernel_size=3, stride=3), # Nx16x11
+            ResBlock(16, 8, 3, 1, 11), # Nx8x11
         )
-    
-    def shortcut(self, in_channels, out_channels):
-        return nn.Sequential(
-            nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1),
-            nn.BatchNorm1d(num_features=out_channels)
+        self.o = nn.Sequential(
+            nn.AvgPool1d(kernel_size=11), # Nx8x1
+            nn.Flatten(start_dim=1), # Nx8
+            nn.Linear(in_features=8, out_features=1)
         )
 
-    def __init__(self, in_channels, winsize):
-        super().__init__()
-        self.winsize = winsize
-
-        # First ResNet Block components
-        self.shortcut1 = self.shortcut(in_channels=in_channels, out_channels=3)
-        self.res1 = self.inner_res_block(in_channels=in_channels, out_channels=3)
-        self.relu1 = nn.ReLU()
-
-        # # Second Res Block components
-        # self.shortcut2 = self.shortcut(in_channels=8, out_channels=16)
-        # self.res2 = self.inner_res_block(in_channels=8, out_channels=16)
-        # self.relu2 = nn.ReLU()
-
-        # Third Res Block components
-        self.shortcut3 = self.shortcut(in_channels=3, out_channels=5)
-        self.res3 = self.inner_res_block(in_channels=3, out_channels=5)
-        self.relu3 = nn.ReLU()
-
     def forward(self, x):
-        # Reshape x: (batch_size, 303) -> (batch_size, 3, 101)
-        x = x.view(-1, 3, self.winsize)
+        x = x.view(-1, self.in_channels, self.winsize)
+        x = self.r(x)
+        x = self.o(x)
+        return x
+
+
+# class ResNetClassifier(nn.Module):
+#     def __init__(self, in_channels, winsize):
+#         super().__init__()
+#         self.winsize = winsize
+
+#         self.resnet_conv = ResNetConv(in_channels=in_channels, winsize=self.winsize)
+#         # Global Pooling and output
+#         self.gp = nn.AvgPool1d(kernel_size=self.winsize)    # Take mean across each feature map (N, C, L) => (N,C)
+#         self.output = nn.Linear(in_features=5, out_features=1)
+
+#     def forward(self, x):
+#         # Run convolutional layers of ResNet
+#         y = self.resnet_conv(x)
+
+#         # Run Global pooling and classifier
+#         y = self.gp(y).squeeze(2)
+#         logits = self.output(y)
+#         return logits
+
+
+# class ResNetConv(nn.Module):
+#     def conv_block(self, in_channels, out_channels, kernel_size, use_relu=True):
+#         if use_relu:
+#             return nn.Sequential(
+#                 nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding='same'),
+#                 nn.BatchNorm1d(num_features=out_channels),
+#                 nn.ReLU()
+#             )
+#         else:
+#             return nn.Sequential(
+#                 nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding='same'),
+#                 nn.BatchNorm1d(num_features=out_channels)
+#             )
+    
+#     def inner_res_block(self, in_channels, out_channels):
+#         return nn.Sequential(
+#             self.conv_block(in_channels=in_channels, out_channels=out_channels, kernel_size=8),
+#             self.conv_block(in_channels=out_channels, out_channels=out_channels, kernel_size=5),
+#             self.conv_block(in_channels=out_channels, out_channels=out_channels, kernel_size=3, use_relu=False)
+#         )
+    
+#     def shortcut(self, in_channels, out_channels):
+#         return nn.Sequential(
+#             nn.Conv1d(in_channels=in_channels, out_channels=out_channels, kernel_size=1),
+#             nn.BatchNorm1d(num_features=out_channels)
+#         )
+
+#     def __init__(self, in_channels, winsize):
+#         super().__init__()
+#         self.winsize = winsize
+
+#         # First ResNet Block components
+#         self.shortcut1 = self.shortcut(in_channels=in_channels, out_channels=3)
+#         self.res1 = self.inner_res_block(in_channels=in_channels, out_channels=3)
+#         self.relu1 = nn.ReLU()
+
+#         # # Second Res Block components
+#         # self.shortcut2 = self.shortcut(in_channels=8, out_channels=16)
+#         # self.res2 = self.inner_res_block(in_channels=8, out_channels=16)
+#         # self.relu2 = nn.ReLU()
+
+#         # Third Res Block components
+#         self.shortcut3 = self.shortcut(in_channels=3, out_channels=5)
+#         self.res3 = self.inner_res_block(in_channels=3, out_channels=5)
+#         self.relu3 = nn.ReLU()
+
+#     def forward(self, x):
+#         # Reshape x: (batch_size, 303) -> (batch_size, 3, 101)
+#         x = x.view(-1, 3, self.winsize)
         
-        # First Res Block
-        x_shortcut = self.shortcut1(x)
-        h = self.res1(x)
-        y = h + x_shortcut
-        y = self.relu1(y)
+#         # First Res Block
+#         x_shortcut = self.shortcut1(x)
+#         h = self.res1(x)
+#         y = h + x_shortcut
+#         y = self.relu1(y)
 
-        # # Second Res Block
-        # y_shortcut = self.shortcut2(y)
-        # h = self.res2(y)
-        # y = h + y_shortcut
-        # y = self.relu2(y)
+#         # # Second Res Block
+#         # y_shortcut = self.shortcut2(y)
+#         # h = self.res2(y)
+#         # y = h + y_shortcut
+#         # y = self.relu2(y)
 
-        # Third Res Block
-        y_shortcut = self.shortcut3(y)
-        h = self.res3(y)
-        y = h + y_shortcut
-        y = self.relu3(y)
+#         # Third Res Block
+#         y_shortcut = self.shortcut3(y)
+#         h = self.res3(y)
+#         y = h + y_shortcut
+#         y = self.relu3(y)
 
-        return y
+#         return y
