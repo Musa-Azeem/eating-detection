@@ -179,3 +179,128 @@ def train_autoencoder_6(epochs, outdir, device, label=''):
         outdir=autoencoder_dir,
         label=label
     )
+
+from lib.models import ResNetClassifier, ResBlock
+from torch import nn
+from lib.data.dataloading import load_nursing
+from pathlib import Path
+from lib.modules import optimization_loop, evaluate_loop
+import torch
+import matplotlib.pyplot as plt
+from sklearn.metrics import precision_recall_fscore_support, confusion_matrix
+from lib.utils import plot_and_save_cm
+import seaborn as sns
+from tabulate import tabulate
+from tqdm import tqdm
+
+def train_classifier():
+    nursing_raw_dir = Path("/home/musa/datasets/nursingv1")
+    nursing_label_dir = Path("/home/musa/datasets/eating_labels")
+    DEVICE = 'cuda:0'
+
+    winsize = 1001
+    nursing_trainloader, nursing_testloader = load_nursing(
+        nursing_raw_dir, 
+        nursing_label_dir, 
+        winsize=winsize, 
+        # session_idxs=[50, 52],
+        # n_sessions=24, 
+        test_size=0.5, 
+        batch_size=256,
+        # shuffle_test=True
+    )
+    model = ResNetClassifier(winsize, 3, (8,8,16,32,64,128,256,512)).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    criterion = nn.BCEWithLogitsLoss()
+    print(sum([p.numel() for p in model.parameters() if p.requires_grad]))
+
+    train_loss_batch = []
+    test_loss_batch = []
+    confs = []
+    train_stats = {'loss': [], 'prec': [], 'recall': [], 'f1score': []}
+    test_stats = {'loss': [], 'prec': [], 'recall': [], 'f1score': []}
+
+    # optimization_loop(model, nursing_trainloader, nursing_testloader, criterion, optimizer, 10, DEVICE)
+
+    for epoch in tqdm(range(1)):
+        model.train()
+        for X,y in (pbar := tqdm(nursing_trainloader, leave=False)):
+            pbar.set_description('Optimizing')
+            X,y = X.to(DEVICE), y.to(DEVICE)
+            logits = model(X)
+            loss = criterion(logits, y)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        
+        model.eval()
+        loss = 0
+        ypred = []
+        for X,y in (pbar := tqdm(nursing_trainloader, leave=False)):
+            pbar.set_description('Evaluating Train')
+            X,y = X.to(DEVICE), y.to(DEVICE)
+            logits = model(X)
+            loss_i = criterion(logits, y).item()
+            train_loss_batch.append(loss_i)
+            loss += loss_i
+            ypred += torch.round(torch.sigmoid(logits.detach().cpu())).tolist()
+        train_stats['loss'].append(loss / len(nursing_trainloader))
+        prec, recall, f1score, _ = precision_recall_fscore_support(
+            nursing_trainloader.dataset.y.squeeze(), 
+            ypred, 
+            zero_division='warn', pos_label=1, average='binary'
+        )
+        train_stats['prec'].append(prec)
+        train_stats['recall'].append(recall)    
+        train_stats['f1score'].append(f1score)
+
+
+        loss = 0
+        test_ypred = []
+        for X,y in (pbar := tqdm(nursing_testloader, leave=False)):
+            pbar.set_description('Evaluation Test')
+            X,y = X.to(DEVICE), y.to(DEVICE)
+            logits = model(X)
+            loss_i = criterion(logits, y).item()
+            test_loss_batch.append(loss_i)
+            loss += loss_i
+            test_ypred += torch.round(torch.sigmoid(logits.detach().cpu())).tolist()
+            confs += torch.sigmoid(logits.detach().cpu()).tolist()
+
+        test_stats['loss'].append(loss / len(nursing_testloader))
+        prec, recall, f1score, _ = precision_recall_fscore_support(
+            nursing_testloader.dataset.y, 
+            test_ypred, 
+            zero_division=0.0, pos_label=1, average='binary'
+        )
+        test_stats['prec'].append(prec)
+        test_stats['recall'].append(recall)
+        test_stats['f1score'].append(f1score)
+
+        torch.save(model.state_dict(), 'dev/test-model.pt')
+
+
+        print("Train\n", tabulate([["Metric", "Value"], *[[k,v] for k,v in train_stats.items()]], headers="firstrow"))
+        print("\nDev\n", tabulate([["Metric", "Value"], *[[k,v] for k,v in test_stats.items()]], headers="firstrow"))
+
+
+        fig,axes = plt.subplots(1, 3, figsize=(25,10))
+
+        axes[0].plot(train_stats['loss'])
+        axes[0].plot(test_stats['loss'])
+        axes[0].plot(train_stats['f1score'])
+        axes[0].plot(test_stats['f1score'])
+        axes[0].legend(['Train Loss', 'Dev Loss', 'Train F1', 'Dev F1'])
+        axes[0].set_title('Metrics')
+
+        axes[1].plot(train_loss_batch)
+        axes[1].plot(test_loss_batch)
+        axes[1].legend(['Train Loss', 'Dev Loss'])
+
+        sns.heatmap(confusion_matrix(y_true=nursing_testloader.dataset.y, y_pred=test_ypred), annot=True, ax=axes[2], cbar=False, fmt='.2f')
+        axes[2].set_title('Dev Confusion Matrix')
+        axes[2].set(xlabel='Predicted', ylabel='True')
+        plt.show()
+        plt.savefig('dev/test.png')

@@ -64,15 +64,18 @@ def read_and_window_nursing_session(session_idx, winsize, datapath, labelpath):
 # ==================== Delta Data Loading and Processing ========================
 # =============================================================================
 
-# def read_delta_session(filepath):
-#     df = pd.read_csv(
-#         Path(filepath), 
-#         header=None,
-#         usecols=[2,3,4],
-#         names=['x_acc','y_acc','z_acc']
-#     )
-#     return df
-
+def read_delta_session(raw_dir, session_dir):
+    session_dir = Path(raw_dir) / Path(session_dir)
+    
+    # Get name of csv file (two possible formats)
+    filepath = session_dir / 'acceleration.csv'
+    if not filepath.is_file():
+        filepath = session_dir / f'acceleration-{session_dir.name}.csv'
+    acceleration = pd.read_csv(filepath, skiprows=1).rename({'x': 'x_acc', 'y': 'y_acc', 'z': 'z_acc'}, axis=1)
+    acceleration = acceleration.dropna()
+    acceleration_start_time_seconds = float(pd.read_csv(filepath, nrows=1,header=None).iloc[0,0].split()[-1])/1000
+    acceleration.timestamp = ((acceleration.timestamp - acceleration.timestamp[0])*1e-9)+acceleration_start_time_seconds # get timestamp in seconds
+    return acceleration
 
 # =============================================================================
 # =========================== Tensor Processing ===============================

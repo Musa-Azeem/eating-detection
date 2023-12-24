@@ -128,18 +128,19 @@ class ResNetClassifier(nn.Module):
         self.winsize = winsize
         self.in_channels = in_channels
         self.dims = dims
+        # self.dims = [self.in_channels] + list(dims)
 
         self.e = nn.Sequential(
             nn.Conv1d(in_channels, dims[0], kernel_size=7, padding='same'),
             nn.LayerNorm((dims[0], winsize)),
             nn.ReLU(),
-            *[ClassifierResBlock(dims[i], dims[i+1], 3, 'same', winsize) for i in range(len(dims)-1)]
+            *[ClassifierResBlock(self.dims[i], self.dims[i+1], 3, 'same', winsize) for i in range(len(self.dims)-1)]
         )
 
         self.o = nn.Sequential(
             nn.AvgPool1d(kernel_size=winsize), # Nxdims[-1]x1
             nn.Flatten(start_dim=1), # Nxdims[-1]
-            nn.Linear(in_features=dims[-1], out_features=1)
+            nn.Linear(in_features=self.dims[-1], out_features=1)
         )
 
     def forward(self, x):
