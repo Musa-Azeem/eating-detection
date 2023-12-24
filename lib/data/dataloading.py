@@ -70,6 +70,19 @@ def load_nursing(raw_dir, label_dir, winsize, n_sessions=None, session_idxs=None
     return trainloader, testloader
 
 def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, test_size=0.25, batch_size=64, shuffle_test=False):
+    """
+        1. Get list of N raw recording directories (from delta app, no labels)
+        2. Read all raw data into N DataFrames of lengths l. Reset their timestamp to be seconds from the start. Print the length of each session
+        3. Read and pad N recordings into N tensors of sizes (l+100 x 3). Then concatonate all recordings into a single tensor of size (L x 3)
+        4. Cut off end of tensor so that C|L. Split the single tensor into chunks of, when chunk_len_hrs=5, C=1.8e6 samples (5 hours) to get a tensor of size (L/C x C x 3).
+        5. Pad each chunk to get a tensor of size (L/C x C+100 x 3). This is so that no windows overlap two chunks
+        6. If desired, select n_hours worth of chunks randomly
+        7. Take 75% of chunks to be training chunks, and take the other 25% to be test chunks
+        8. Seperately flatten the first two dims of train and test chunks to get tensors of size (L1 x 3) and (L2 x 3)
+        9. Create an AccRawDataset for train and test chunks. This dataset will create windows dynamically to return tensors of size (303). It will have size L-101.
+        10. Create a DataLoader for train and test datasets
+    """
+    
     raw_dir = Path(raw_dir)
     if n_hours and n_hours < chunk_len_hrs*2:
         raise ValueError(f"n_hours must be at least chunk_len_hrs*2 ({chunk_len_hrs*2})")
@@ -80,7 +93,6 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
     else:
         print("Using all available sessions")
         sessions = list(raw_dir.iterdir())
-        print(sessions)
     print("Using Directories: "+str([session.name for session in sessions]))
 
     # Read all sessions from CSVs
@@ -97,7 +109,6 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
     # Concatenate all sessions and split into chunks of length chunk_len_hrs
     chunk_len = chunk_len_hrs * 60 * 60 * 100 # number of samples at 100 Hz to get chunk_len_hrs hours
     all_acc = torch.cat(accs, axis=0)
-    print(f"Total length: {timedelta(seconds=len(all_acc) / 100)} ({len(all_acc)} Samples)")
     all_acc = all_acc[:len(all_acc) - len(all_acc) % chunk_len] # cut off very last part
     all_acc = all_acc.view(-1, chunk_len, 3)
     print(f"Created {len(all_acc)} chunks of length {chunk_len} samples each")
@@ -112,6 +123,7 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
         all_acc = all_acc[idxs]
         print(f"Randomly selected {n_chunks} chunks")
 
+    # Split into train and test
     def proc(x):
         x = pad_for_windowing(x, winsize) # pad second dimension
         x = x.flatten(end_dim=1)
@@ -119,8 +131,13 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
     np.random.seed(10)
     acctr, accte = map(proc, train_test_split(all_acc, test_size=test_size))
 
+    print(f"Total train length: {timedelta(seconds=len(acctr) / 100)} ({len(acctr)} Samples)")
+    print(f"Total test length: {timedelta(seconds=len(accte) / 100)} ({len(accte)} Samples)")
+
     Xtr = AccRawDataset(acctr, winsize)
     Xte = AccRawDataset(accte, winsize)
 
     trainloader = DataLoader(Xtr, batch_size=batch_size, shuffle=True, num_workers=4)
     testloader = DataLoader(Xte, batch_size=batch_size, shuffle=shuffle_test, num_workers=4)
+
+    return trainloader, testloader
