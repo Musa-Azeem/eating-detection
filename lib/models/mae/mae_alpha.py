@@ -24,7 +24,7 @@ class ResBlockMAE(nn.Module):
     def forward(self, x):
         return self.relu(self.identity(x) + self.c(x))
 
-class MAE(nn.Module):
+class MAEAlpha(nn.Module):
     def __init__(self, winsize, in_channels, dims, maskpct=0.25):
         super().__init__()
         self.winsize = winsize
@@ -55,7 +55,7 @@ class MAE(nn.Module):
         x = self.d(x)
         return x.flatten(start_dim=1)
     
-class MAEClassifier(nn.Module):
+class MAEAlphaClassifier(nn.Module):
     def __init__(self, winsize, in_channels, dims, n_hl=10, weights_file=None, freeze=False):
         super().__init__()
 
