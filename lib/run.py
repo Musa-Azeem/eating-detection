@@ -180,6 +180,38 @@ def train_autoencoder_6(epochs, outdir, device, label=''):
         label=label
     )
 
+from lib.models import MAE
+from lib.config import RAW_DIR
+from lib.data.dataloading import load_raw
+def train_mae_7(epochs, outdir, device, label=''):
+    DEVICE = device
+    WINSIZE = 1001
+    autoencoder_dir = Path(outdir)
+
+    model = MAE(WINSIZE, 3, (8,16,64,193), maskpct=0.25).to(DEVICE)
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+
+    trainloader, testloader = load_raw(
+        RAW_DIR,
+        WINSIZE,
+        test_size=0.25,
+        batch_size=512
+    )
+    optimization_loop_xonly(
+        model, 
+        trainloader, 
+        testloader, 
+        criterion, 
+        optimizer, 
+        epochs, 
+        DEVICE, 
+        patience=10,
+        min_delta=0.001,
+        outdir=autoencoder_dir,
+        label=label
+    )
+
 from lib.models import ResNetClassifier, ResBlock
 from torch import nn
 from lib.data.dataloading import load_nursing

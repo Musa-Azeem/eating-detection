@@ -170,14 +170,15 @@ def inner_evaluate_loop(
     dev_lossi = []
 
     model.eval()
-    for X,y in devloader:
-        y_true.append(y)
-        X,y = X.to(device), y.to(device)
-        logits = model(X)
-        dev_lossi.append(criterion(logits, y).item())
-        confs = torch.sigmoid(logits).detach().cpu()
-        all_confs.append(confs)
-        y_preds.append(torch.round(confs))
+    with torch.no_grad():
+        for X,y in devloader:
+            y_true.append(y)
+            X,y = X.to(device), y.to(device)
+            logits = model(X)
+            dev_lossi.append(criterion(logits, y).item())
+            confs = torch.sigmoid(logits).detach().cpu()
+            all_confs.append(confs)
+            y_preds.append(torch.round(confs))
 
     return (
         torch.cat(y_true), 
@@ -346,6 +347,7 @@ def optimization_loop_xonly(
     label: str = ''
 ):
     if outdir:
+        outdir = Path(outdir)
         model_outdir = outdir / 'model'
         model_outdir.mkdir(parents=True)
         info_file = Path(outdir / 'info.txt')
@@ -445,10 +447,11 @@ def inner_evaluate_loop_xonly(
     dev_lossi = []
 
     model.eval()
-    for X in devloader:
-        X = X.to(device)
-        logits = model(X)
-        dev_lossi.append(criterion(logits, X).item())
+    with torch.no_grad():
+        for X in devloader:
+            X = X.to(device)
+            logits = model(X)
+            dev_lossi.append(criterion(logits, X).item())
 
     return dev_lossi
 

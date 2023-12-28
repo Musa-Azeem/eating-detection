@@ -2,9 +2,8 @@
 
 # Train autoencoder
 
-# ae_args="epochs=100, outdir='dev/6_bigger-autoencoder', device='cuda:0', label='ResNet Autoencoder'"
-ae_args="epochs=100, outdir='dev/5_resnetautoencoder/5_autoencoder-resnet-chris', device='cuda:0', label='ResNet Autoencoder'"
-run_func="train_autoencoder_5"
+ae_args="epochs=100, outdir='dev/7_mae/alpha', device='cuda:1', label='Masked Autoencoder'"
+run_func="train_mae_7"
 env/bin/python3 -c "from lib.run import $run_func; $run_func($ae_args)"
 
 # # Train classifier in 4 ways

@@ -131,7 +131,7 @@ class ResNetClassifier(nn.Module):
         # self.dims = [self.in_channels] + list(dims)
 
         self.e = nn.Sequential(
-            nn.Conv1d(in_channels, dims[0], kernel_size=7, padding='same'),
+            nn.Conv1d(in_channels, dims[0], kernel_size=9, padding='same'),
             nn.LayerNorm((dims[0], winsize)),
             nn.ReLU(),
             *[ClassifierResBlock(self.dims[i], self.dims[i+1], 3, 'same', winsize) for i in range(len(self.dims)-1)]
