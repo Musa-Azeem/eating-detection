@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 from torch.utils.data import TensorDataset, DataLoader
-from lib.models import MLP2hl, ResAutoEncoder, ResEncoderClassifier, ResEncoderClassifierAve, BiggerResNetAE, ResNetClassifier
+from lib.models import *
 from lib.modules import optimization_loop_xonly, optimization_loop, pad_for_windowing, window_session, evaluate_loop
 from lib.utils import plot_and_save_losses, plot_and_save_cm, summary
 from datetime import datetime
@@ -181,14 +181,14 @@ def train_autoencoder_6(epochs, outdir, device, label=''):
     )
 
 from lib.models import MAE
-from lib.config import RAW_DIR
+from lib.config import RAW_DIR, NURSING_RAW_DIR, NURSING_LABEL_DIR
 from lib.data.dataloading import load_raw
 def train_mae_7(epochs, outdir, device, label=''):
     DEVICE = device
     WINSIZE = 1001
     autoencoder_dir = Path(outdir)
 
-    model = MAE(WINSIZE, 3, (8,16,64,193), maskpct=0.25).to(DEVICE)
+    model = MAE(WINSIZE, 3, (8,16,64,256), maskpct=0.25).to(DEVICE)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
@@ -209,6 +209,44 @@ def train_mae_7(epochs, outdir, device, label=''):
         patience=10,
         min_delta=0.001,
         outdir=autoencoder_dir,
+        label=label
+    )
+def train_mae_class_7(epochs, outdir, device, autoencoder_dir=None, freeze=True, label=''):
+    DEVICE = device
+    autoencoder_dir = Path(autoencoder_dir) if autoencoder_dir else None
+    encoderclass_dir = Path(outdir)
+
+    winsize = 1001
+    nursing_trainloader, nursing_testloader = load_nursing(
+        NURSING_RAW_DIR, 
+        NURSING_LABEL_DIR, 
+        winsize=winsize, 
+        n_sessions=12,
+        test_size=0.25, 
+        batch_size=512,
+    )
+
+    model = MAEClassifier(
+        winsize, 
+        in_channels=3,
+        dims=(8,16,64,256),
+        n_hl=100,
+        weights_file=autoencoder_dir / 'best_model.pt' if autoencoder_dir else None, 
+        freeze=freeze
+    ).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    criterion = nn.BCEWithLogitsLoss()
+
+    optimization_loop(
+        model, 
+        nursing_trainloader, 
+        nursing_testloader, 
+        criterion, optimizer, 
+        epochs, 
+        DEVICE, 
+        patience=10,
+        min_delta=0.0001,
+        outdir=encoderclass_dir,
         label=label
     )
 

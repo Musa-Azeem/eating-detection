@@ -89,7 +89,8 @@ def plot_and_save_losses(
     train_losses: list[float], 
     test_losses: list[float], 
     n_epochs: int,
-    filename: str
+    filename: str,
+    f1: list[float] = None
 ) -> None:
     """
         Plots a loss curve for given train and test losses.
@@ -103,12 +104,16 @@ def plot_and_save_losses(
 
     plt.style.use('ggplot')
     plt.figure(figsize=(16,9))
-    plt.plot(torch.tensor(train_losses), label='Train Loss')
-    plt.plot(torch.tensor(test_losses), label='Test Loss')
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(test_losses, label='Test Loss')
     plt.ylabel("Loss")
     plt.xlabel('Epochs')
-    plt.legend(loc='lower left')
     plt.title(f'Train and Test Loss over {n_epochs} Epochs')
+    if f1:
+        plt.plot(f1, label='F1')
+        plt.ylabel("Loss/F1")
+        plt.title(f'Train and Test Loss/F1 over {n_epochs} Epochs')
+    plt.legend(loc='lower left')
     plt.savefig(filename, dpi=400)
     plt.close()
 

@@ -18,6 +18,7 @@ from .utils import (
 from tqdm import tqdm
 import plotly.express as px
 import os
+import json
 
 # =============================================================================
 # =================== Nursing Data Loading and Processing =====================
@@ -268,12 +269,15 @@ def optimization_loop(
         outdir = Path(outdir)
         model_outdir = outdir / 'model'
         model_outdir.mkdir(parents=True)
-        info_file = Path(outdir / 'info.txt')
-        with info_file.open('w') as f:
-            f.write("Best Model: ")
+        info_file = outdir / 'info.json'
+        stats_dir = outdir / 'stats'
+        stats_dir.mkdir()
 
     train_loss = []
     dev_loss = []
+    prec = []
+    recall = []
+    f1 = []
 
     lowest_loss = float('inf')
     early_stop_counter = 0
@@ -290,11 +294,19 @@ def optimization_loop(
         y_true, y_pred, confs, dev_lossi = inner_evaluate_loop(model, devloader, criterion, device)
         dev_loss.append(sum(dev_lossi) / len(devloader))
 
+        preci, recalli, f1i, _ = precision_recall_fscore_support(
+            y_true, y_pred, zero_division='warn', pos_label=1, average='binary'
+        )
+        prec.append(preci)
+        recall.append(recalli)
+        f1.append(f1i)
+
         pbar.set_description(f'{label}: Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
 
         # Plot loss
         plt.plot(train_loss)
         plt.plot(dev_loss)
+        plt.plot(f1)
         plt.savefig('running_loss.jpg')
 
         # Early Stopping
@@ -312,13 +324,24 @@ def optimization_loop(
         
         if outdir:
             torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
-            plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'))
+            torch.save(train_loss, stats_dir / 'train_loss.pt')
+            torch.save(dev_loss, stats_dir / 'dev_loss.pt')
+            torch.save(prec, stats_dir / 'prec.pt')
+            torch.save(recall, stats_dir / 'recall.pt')
+            torch.save(f1, stats_dir / 'f1.pt')
+            plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'), f1=f1)
 
             # Save model with lowest loss
             if lower:
                 torch.save(model.state_dict(), outdir / f'best_model.pt')
                 with info_file.open('w') as f:
-                    f.write(f"Best Model: {epoch}\nLoss: {lowest_loss}")  
+                    json.dump({
+                        "best_model": epoch,
+                        "loss": lowest_loss,
+                        "precision": preci,
+                        "recall": recalli,
+                        "f1": f1i
+                    }, f, indent=4)
         plt.close()
 
         # If we run out of patience, stop

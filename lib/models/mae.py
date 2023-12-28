@@ -54,3 +54,44 @@ class MAE(nn.Module):
         x = self.e(x)
         x = self.d(x)
         return x.flatten(start_dim=1)
+    
+class MAEClassifier(nn.Module):
+    def __init__(self, winsize, in_channels, dims, n_hl=10, weights_file=None, freeze=False):
+        super().__init__()
+
+        self.winsize = winsize
+        self.in_channels = in_channels
+        self.dims = dims
+        self.weights_file = weights_file
+        self.freeze = freeze
+
+        self.encoder = self.get_encoder()
+        self.classifier = nn.Sequential(
+            nn.AvgPool1d(kernel_size=winsize), # Nxenc_dimx1
+            nn.Flatten(start_dim=1), # Nxenc_dim
+            nn.Linear(in_features=self.dims[-1], out_features=n_hl),
+            nn.ReLU(),
+            nn.Linear(in_features=n_hl, out_features=1)
+        )
+
+    def forward(self, x):
+        x = x.view(-1, self.in_channels, self.winsize)
+        x = self.encoder(x)
+        x = self.classifier(x)
+        return x
+
+    def get_encoder(self):
+        autoencoder = MAE(self.winsize, self.in_channels, self.dims)
+
+        if self.weights_file:
+            print("Model is loading pretrained encoder")
+            autoencoder.load_state_dict(torch.load(self.weights_file))
+        
+        encoder = autoencoder.e
+
+        if self.freeze:
+            print("Model is freezing encoder")
+            for p in encoder.parameters():
+                p.requires_grad = False
+        
+        return encoder

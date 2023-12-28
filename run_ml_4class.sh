@@ -2,15 +2,14 @@
 
 # Train autoencoder
 
-autoencoder_outdir="dev/5_resnetautoencoder/5_autoencoder-resnet"
+autoencoder_outdir="dev/7_mae/alpha"
 
 
 # Train classifier in 4 ways
+epochs="100"
 
-epochs=100
-
-run_func="train_encoderclassifier_avgpool"
-class_outdir="dev/5_resnetautoencoder/encoder_class-avg"
+run_func="train_mae_class_7"
+class_outdir="dev/7_mae/alpha/classifiers"
 
 # 1. Train classifier with pretrained, frozen encoder
 class1_args="epochs=${epochs}, outdir='${class_outdir}/1-pretrained-frozen', device='cuda:0', autoencoder_dir='${autoencoder_outdir}', freeze=True, label='1. Pretrained, frozen encoder'"
