@@ -2,7 +2,7 @@ from torch import nn
 import torch
 
 class ResBlockMAE(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, padding, seq_len, relu=True):
+    def __init__(self, in_channels, out_channels, kernel_size, padding, seq_len, relu=True, p_dropout=None):
         super().__init__()
         self.use_relu = relu
         self.c = nn.Sequential(
@@ -17,7 +17,9 @@ class ResBlockMAE(nn.Module):
         )
         if self.use_relu:
             self.c.add_module('relu', nn.ReLU())
-        
+        if p_dropout is not None:
+            self.c.add_module('dropout', nn.Dropout(p=p_dropout))
+
         self.identity = nn.Sequential(
             nn.Conv1d(in_channels, out_channels, kernel_size=1),
             nn.LayerNorm((out_channels, seq_len))
@@ -29,7 +31,7 @@ class ResBlockMAE(nn.Module):
         return self.relu(x) if self.use_relu else x
     
 class MAEGamma(nn.Module):
-    def __init__(self, winsize, in_channels, enc_dims=(8,16,32,64), rec_dims=(64,128,192), maskpct=0.75):
+    def __init__(self, winsize, in_channels, mask_chunk_size=11, enc_dims=(8,16,32,64,96,128), rec_dims=(128,160,192,224,256), maskpct=0.75):
         super().__init__()
         self.winsize = winsize
         self.in_channels = in_channels
@@ -37,30 +39,38 @@ class MAEGamma(nn.Module):
         self.rec_dims = rec_dims
         self.dec_dims = [rec_dims[-1]] + list(enc_dims)[::-1]
         self.maskpct = maskpct
+        self.mask_chunk_size = mask_chunk_size
+        p_dropout = 0.025
 
         self.e = nn.Sequential(
             ResBlockMAE(in_channels, enc_dims[0], 9, 'same', winsize),
-            *[ResBlockMAE(self.enc_dims[i], self.enc_dims[i+1], 3, 'same', winsize) for i in range(len(self.enc_dims)-1)]
+            *[ResBlockMAE(self.enc_dims[i], self.enc_dims[i+1], 3, 'same', winsize, p_dropout=p_dropout) for i in range(len(self.enc_dims)-1)]
         )
         self.r = nn.Sequential(
-            *[ResBlockMAE(self.rec_dims[i], self.rec_dims[i+1], 3, 'same', winsize) for i in range(len(self.rec_dims)-1)],
+            *[ResBlockMAE(self.rec_dims[i], self.rec_dims[i+1], 3, 'same', winsize, p_dropout=p_dropout) for i in range(len(self.rec_dims)-1)],
         )
         self.d = nn.Sequential(
-            *[ResBlockMAE(self.dec_dims[i], self.dec_dims[i+1], 3, 'same', winsize) for i in range(len(self.dec_dims)-1)],
+            *[ResBlockMAE(self.dec_dims[i], self.dec_dims[i+1], 3, 'same', winsize, p_dropout=p_dropout) for i in range(len(self.dec_dims)-1)],
             ResBlockMAE(self.dec_dims[-1], in_channels, 9, 'same', winsize, relu=False)
         )
 
     def forward(self, x):
         x = x.view(-1, self.in_channels, self.winsize)
         x = self.e(x)
-        # Mask: randomly set maskpct% of X (all 64 dims) to values from a normal distribution
-        mask = torch.rand(x.shape[0], 1, x.shape[2]) < self.maskpct # maskpct% of values are True
-        mask = mask.expand(-1,self.enc_dims[-1],-1)                         # expand to all 64 dims
-        x_masked = x.clone()
-        x_masked[mask] = torch.randn(x.shape)[mask].to(x.device)
-        x = self.r(x_masked)
+        x = self.mask(x)
+        x = self.r(x)
         x = self.d(x)
         return x.flatten(start_dim=1)
+    
+    def mask(self, x):
+        # Mask: split X into chunks and randomly set maskpct% of chunks 
+        # (all 64 dims) to values from a normal distribution
+        x = x.view(x.shape[0], x.shape[1], x.shape[2]//self.mask_chunk_size, -1).clone()
+        mask = torch.rand(x.shape[0], 1, x.shape[2]) < self.maskpct # maskpct% of values are True
+        mask = mask.expand(-1, x.shape[1], -1)                      # expand to all 64 dims
+        x[mask] = torch.randn(x.shape, device=x.device)[mask]       # set masked chunks to random values
+        x = x.flatten(start_dim=2)                                  # get rid of chunk dim
+        return x
 
 class MAEGammaClassifier(nn.Module):
     pass

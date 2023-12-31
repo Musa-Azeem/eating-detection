@@ -2,7 +2,7 @@
 
 # Train autoencoder
 
-ae_args="epochs=100, outdir='dev/7_mae/beta', device='cuda:0', label='Masked Autoencoder'"
+ae_args="epochs=100, outdir='dev/7_mae/gamma', device='cuda:0', label='Masked Autoencoder'"
 run_func="train_mae_7"
 env/bin/python3 -c "from lib.run import $run_func; $run_func($ae_args)"
 

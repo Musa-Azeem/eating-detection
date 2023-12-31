@@ -180,14 +180,14 @@ def train_autoencoder_6(epochs, outdir, device, label=''):
         label=label
     )
 
-from lib.models import MAEAlpha, MAEAlphaClassifier, MAEBeta, MAEBetaClassifier
+from lib.models import MAEAlpha, MAEAlphaClassifier, MAEBeta, MAEBetaClassifier, MAEGamma
 from lib.config import RAW_DIR, NURSING_RAW_DIR, NURSING_LABEL_DIR
 from lib.data.dataloading import load_raw
 def train_mae_7(epochs, outdir, device, label=''):
     winsize = 1001
     autoencoder_dir = Path(outdir)
 
-    model = MAEBeta(winsize, 3).to(device)
+    model = MAEGamma(winsize, 3).to(device)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
@@ -207,7 +207,7 @@ def train_mae_7(epochs, outdir, device, label=''):
         optimizer, 
         epochs, 
         device, 
-        patience=10,
+        patience=15,
         min_delta=0.001,
         outdir=autoencoder_dir,
         label=label
