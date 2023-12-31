@@ -81,7 +81,7 @@ class MAEAlphaClassifier(nn.Module):
         return x
 
     def get_encoder(self):
-        autoencoder = MAE(self.winsize, self.in_channels, self.dims)
+        autoencoder = MAEAlpha(self.winsize, self.in_channels, self.dims)
 
         if self.weights_file:
             print("Model is loading pretrained encoder")

@@ -28,7 +28,7 @@ class ResBlockMAE(nn.Module):
         x = self.c(x) + self.identity(x)
         return self.relu(x) if self.use_relu else x
     
-class MAEBeta(nn.Module):
+class MAEGamma(nn.Module):
     def __init__(self, winsize, in_channels, enc_dims=(8,16,32,64), rec_dims=(64,128,192), maskpct=0.75):
         super().__init__()
         self.winsize = winsize
@@ -62,43 +62,5 @@ class MAEBeta(nn.Module):
         x = self.d(x)
         return x.flatten(start_dim=1)
 
-class MAEBetaClassifier(nn.Module):
-    def __init__(self, winsize, in_channels, dims=(8,16,32,64), n_hl=100, weights_file=None, freeze=False):
-        super().__init__()
-
-        self.winsize = winsize
-        self.in_channels = in_channels
-        self.dims = dims
-        self.weights_file = weights_file
-        self.freeze = freeze
-
-        self.encoder = self.get_encoder()
-        self.classifier = nn.Sequential(
-            nn.AvgPool1d(kernel_size=winsize), # Nxenc_dimx1
-            nn.Flatten(start_dim=1), # Nxenc_dim
-            nn.Linear(in_features=self.dims[-1], out_features=n_hl),
-            nn.ReLU(),
-            nn.Linear(in_features=n_hl, out_features=1)
-        )
-
-    def forward(self, x):
-        x = x.view(-1, self.in_channels, self.winsize)
-        x = self.encoder(x)
-        x = self.classifier(x)
-        return x
-
-    def get_encoder(self):
-        autoencoder = MAEBeta(self.winsize, self.in_channels)
-
-        if self.weights_file:
-            print("Model is loading pretrained encoder")
-            autoencoder.load_state_dict(torch.load(self.weights_file))
-        
-        encoder = autoencoder.e
-
-        if self.freeze:
-            print("Model is freezing encoder")
-            for p in encoder.parameters():
-                p.requires_grad = False
-        
-        return encoder
+class MAEGammaClassifier(nn.Module):
+    pass

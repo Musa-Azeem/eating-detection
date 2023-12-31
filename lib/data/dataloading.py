@@ -87,6 +87,9 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
     if n_hours and n_hours < chunk_len_hrs*2:
         raise ValueError(f"n_hours must be at least chunk_len_hrs*2 ({chunk_len_hrs*2})")
 
+    n_samples = int(n_hours * 60 * 60 * 100) if n_hours else None   # number of samples at 100 Hz to get n_hours hours
+    chunk_len = int(chunk_len_hrs * 60 * 60 * 100)                  # number of samples at 100 Hz to get chunk_len_hrs hours
+
     # Use all available sessions if none provided
     if sessions:
         sessions = [raw_dir / Path(session) for session in sessions]
@@ -106,16 +109,15 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
     for acc in accelerations:
         accs.append(pad_for_windowing(torch.Tensor(acc[['x_acc','y_acc','z_acc']].values), winsize))
 
-    # Concatenate all sessions and split into chunks of length chunk_len_hrs
-    chunk_len = int(chunk_len_hrs * 60 * 60 * 100) # number of samples at 100 Hz to get chunk_len_hrs hours
+    # Concatenate all sessions and split into chunks of chunk_len samples
     all_acc = torch.cat(accs, axis=0)
     all_acc = all_acc[:len(all_acc) - len(all_acc) % chunk_len] # cut off very last part
     all_acc = all_acc.view(-1, chunk_len, 3)
     print(f"Created {len(all_acc)} chunks of length {chunk_len} samples each")
 
-    if n_hours:
-        # Randomly Select n_hours worth of chunks
-        n_chunks = n_hours // chunk_len_hrs # if chunk_len_hrs is 5: 5 hours = 1 chunk, 10 hours = 2 chunks, etc.
+    if n_samples:
+        # Randomly Select n_samples worth of chunks
+        n_chunks = n_samples // chunk_len # if chunk_len_hrs is 5: 5 hours = 1 chunk, 10 hours = 2 chunks, etc.
         if n_chunks > len(all_acc):
             raise ValueError(f"n_hours ({n_hours}) is greater than the total number of hours ({len(all_acc)*chunk_len_hrs})")
         random.seed(10)

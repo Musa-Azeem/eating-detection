@@ -180,23 +180,24 @@ def train_autoencoder_6(epochs, outdir, device, label=''):
         label=label
     )
 
-from lib.models import MAE
+from lib.models import MAEAlpha, MAEAlphaClassifier, MAEBeta, MAEBetaClassifier
 from lib.config import RAW_DIR, NURSING_RAW_DIR, NURSING_LABEL_DIR
 from lib.data.dataloading import load_raw
 def train_mae_7(epochs, outdir, device, label=''):
-    DEVICE = device
-    WINSIZE = 1001
+    winsize = 1001
     autoencoder_dir = Path(outdir)
 
-    model = MAE(WINSIZE, 3, (8,16,64,256), maskpct=0.25).to(DEVICE)
+    model = MAEBeta(winsize, 3).to(device)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
     trainloader, testloader = load_raw(
         RAW_DIR,
-        WINSIZE,
-        test_size=0.25,
-        batch_size=512
+        winsize,
+        n_hours=2,
+        test_size=0.5,
+        batch_size=256,
+        chunk_len_hrs=0.25
     )
     optimization_loop_xonly(
         model, 
@@ -205,13 +206,14 @@ def train_mae_7(epochs, outdir, device, label=''):
         criterion, 
         optimizer, 
         epochs, 
-        DEVICE, 
+        device, 
         patience=10,
         min_delta=0.001,
         outdir=autoencoder_dir,
         label=label
     )
 def train_mae_class_7(epochs, outdir, device, autoencoder_dir=None, freeze=True, label=''):
+    torch.multiprocessing.set_sharing_strategy('file_system')
     DEVICE = device
     autoencoder_dir = Path(autoencoder_dir) if autoencoder_dir else None
     encoderclass_dir = Path(outdir)
@@ -221,16 +223,14 @@ def train_mae_class_7(epochs, outdir, device, autoencoder_dir=None, freeze=True,
         NURSING_RAW_DIR, 
         NURSING_LABEL_DIR, 
         winsize=winsize, 
-        n_sessions=12,
-        test_size=0.25, 
-        batch_size=512,
+        n_sessions=16,
+        test_size=0.5, 
+        batch_size=256,
     )
 
-    model = MAEClassifier(
+    model = MAEBetaClassifier(
         winsize, 
         in_channels=3,
-        dims=(8,16,64,256),
-        n_hl=100,
         weights_file=autoencoder_dir / 'best_model.pt' if autoencoder_dir else None, 
         freeze=freeze
     ).to(DEVICE)
