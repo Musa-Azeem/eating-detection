@@ -374,6 +374,8 @@ def optimization_loop_xonly(
         model_outdir = outdir / 'model'
         model_outdir.mkdir(parents=True)
         info_file = Path(outdir / 'info.txt')
+        stats_dir = outdir / 'stats'
+        stats_dir.mkdir()
         with info_file.open('w') as f:
             f.write("Best Model: ")
             
@@ -418,6 +420,8 @@ def optimization_loop_xonly(
 
         if outdir:
             torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
+            torch.save(train_loss, stats_dir / 'train_loss.pt')
+            torch.save(dev_loss, stats_dir / 'dev_loss.pt')
             plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'))
 
             # Save model with lowest loss

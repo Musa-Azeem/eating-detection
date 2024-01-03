@@ -187,7 +187,7 @@ def train_mae_7(epochs, outdir, device, label=''):
     winsize = 1001
     autoencoder_dir = Path(outdir)
 
-    model = MAEGamma(winsize, 3).to(device)
+    model = MAEGamma(winsize, 3, maskpct=).to(device)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
@@ -196,7 +196,7 @@ def train_mae_7(epochs, outdir, device, label=''):
         winsize,
         n_hours=2,
         test_size=0.5,
-        batch_size=256,
+        batch_size=256 ,
         chunk_len_hrs=0.25
     )
     optimization_loop_xonly(

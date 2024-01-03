@@ -31,7 +31,7 @@ class ResBlockMAE(nn.Module):
         return self.relu(x) if self.use_relu else x
     
 class MAEGamma(nn.Module):
-    def __init__(self, winsize, in_channels, mask_chunk_size=11, enc_dims=(8,16,32,64,96,128), rec_dims=(128,160,192,224,256), maskpct=0.75):
+    def __init__(self, winsize, in_channels, mask_chunk_size=11, enc_dims=(8,16,32,64,96,128,128,256,256,512,512), rec_dims=(512,512,1028,512,512), maskpct=0.75):
         super().__init__()
         self.winsize = winsize
         self.in_channels = in_channels
