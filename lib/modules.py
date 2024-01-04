@@ -19,6 +19,7 @@ from tqdm import tqdm
 import plotly.express as px
 import os
 import json
+from torch.utils.tensorboard import SummaryWriter
 
 # =============================================================================
 # =================== Nursing Data Loading and Processing =====================
@@ -367,7 +368,8 @@ def optimization_loop_xonly(
     patience: int = None,
     min_delta: float = 0.0001,
     outdir: Path = None,
-    label: str = ''
+    label: str = '',
+    writer = None
 ):
     if outdir:
         outdir = Path(outdir)
@@ -378,7 +380,9 @@ def optimization_loop_xonly(
         stats_dir.mkdir()
         with info_file.open('w') as f:
             f.write("Best Model: ")
-            
+    
+    if writer:
+        writer = SummaryWriter(writer)    
 
     train_loss = []
     dev_loss = []
@@ -431,10 +435,18 @@ def optimization_loop_xonly(
                     f.write(f"Best Model: {epoch}\nLoss: {lowest_loss}")   
         plt.close()
 
+        if writer:
+            writer.add_scalar('Loss/train', train_loss[-1], epoch)
+            writer.add_scalar('Loss/dev', dev_loss[-1], epoch)
+            writer.flush()
+
         # If we run out of patience, stop
         if patience and early_stop_counter >= patience:
             print(f'Early stopping at epoch {epoch}')
             break
+
+    if writer:
+        writer.close()
 
 
 def inner_train_loop_xonly(

@@ -187,7 +187,7 @@ def train_mae_7(epochs, outdir, device, label=''):
     winsize = 1001
     autoencoder_dir = Path(outdir)
 
-    model = MAEGamma(winsize, 3, maskpct=).to(device)
+    model = MAEGamma(winsize, 3, maskpct=0.25).to(device)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
@@ -248,6 +248,36 @@ def train_mae_class_7(epochs, outdir, device, autoencoder_dir=None, freeze=True,
         min_delta=0.0001,
         outdir=encoderclass_dir,
         label=label
+    )
+def train_mae_8(epochs, outdir, device, maskpct, label=''):
+    winsize = 1001
+    autoencoder_dir = Path(outdir)
+
+    model = MAEDelta(winsize, 3, enc_dims=(32,64,128), d_model=192, maskpct=maskpct).to(device)
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+
+    trainloader, testloader = load_raw(
+        RAW_DIR,
+        winsize,
+        n_hours=2,
+        test_size=0.5,
+        batch_size=128,
+        chunk_len_hrs=0.10
+    )
+    optimization_loop_xonly(
+        model, 
+        trainloader, 
+        testloader, 
+        criterion, 
+        optimizer, 
+        epochs, 
+        device, 
+        patience=15,
+        min_delta=0.001,
+        outdir=autoencoder_dir,
+        label=label,
+        writer=f'runs/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_delta_mask{maskpct*100}_2hrs'
     )
 
 from lib.models import ResNetClassifier, ResBlock
