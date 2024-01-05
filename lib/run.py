@@ -180,7 +180,7 @@ def train_autoencoder_6(epochs, outdir, device, label=''):
         label=label
     )
 
-from lib.models import MAEAlpha, MAEAlphaClassifier, MAEBeta, MAEBetaClassifier, MAEGamma
+from lib.models import MAEAlpha, MAEAlphaClassifier, MAEBeta, MAEBetaClassifier, MAEGamma, MAEDelta, MAEDeltaClassifier
 from lib.config import RAW_DIR, NURSING_RAW_DIR, NURSING_LABEL_DIR
 from lib.data.dataloading import load_raw
 def train_mae_7(epochs, outdir, device, label=''):
@@ -260,10 +260,10 @@ def train_mae_8(epochs, outdir, device, maskpct, label=''):
     trainloader, testloader = load_raw(
         RAW_DIR,
         winsize,
-        n_hours=2,
+        n_hours=10,
         test_size=0.5,
         batch_size=128,
-        chunk_len_hrs=0.10
+        chunk_len_hrs=0.5
     )
     optimization_loop_xonly(
         model, 
@@ -277,7 +277,44 @@ def train_mae_8(epochs, outdir, device, maskpct, label=''):
         min_delta=0.001,
         outdir=autoencoder_dir,
         label=label,
-        writer=f'runs/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_delta_mask{maskpct*100}_2hrs'
+        writer=f'runs/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_delta_mask{maskpct*100}_10hrs'
+    )
+def train_mae_class_8(epochs, outdir, device, autoencoder_dir=None, freeze=True, label=''):
+    torch.multiprocessing.set_sharing_strategy('file_system')
+    autoencoder_dir = Path(autoencoder_dir) if autoencoder_dir else None
+    encoderclass_dir = Path(outdir)
+
+    winsize = 1001
+    nursing_trainloader, nursing_testloader = load_nursing(
+        NURSING_RAW_DIR, 
+        NURSING_LABEL_DIR, 
+        winsize=winsize, 
+        n_sessions=16,
+        test_size=0.5, 
+        batch_size=256,
+    )
+
+    model = MAEDeltaClassifier(
+        winsize, 
+        in_channels=3,
+        weights_file=autoencoder_dir / 'best_model.pt' if autoencoder_dir else None, 
+        freeze=freeze
+    ).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    criterion = nn.BCEWithLogitsLoss()
+
+    optimization_loop(
+        model, 
+        nursing_trainloader, 
+        nursing_testloader, 
+        criterion, optimizer, 
+        epochs, 
+        device, 
+        patience=10,
+        min_delta=0.0001,
+        outdir=encoderclass_dir,
+        label=label,
+        writer=f'runs/delta_classifier/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_16sessions_{"frozen" if freeze else "unfrozen"}_{"pretrained" if autoencoder_dir else "untrained"}'
     )
 
 from lib.models import ResNetClassifier, ResBlock

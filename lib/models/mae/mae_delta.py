@@ -53,14 +53,14 @@ class PositionalEncoding(nn.Module):
         return x
     
 class MAEDelta(nn.Module):
-    def __init__(self, winsize, in_channels, mask_chunk_size=11, enc_dims=(8,16,32,64,96,128), d_model=192, maskpct=0.75):
+    def __init__(self, winsize, in_channels, mask_chunk_size=11, enc_dims=(32,64,128), d_model=192, maskpct=0.75):
         super().__init__()
         self.winsize = winsize
         self.enc_dims = enc_dims
         self.d_model = d_model
         self.mask_chunk_size = mask_chunk_size
         self.maskpct = maskpct
-        p_dropout = 0.01
+        p_dropout = 0.015
         
         self.e = nn.Sequential(
             ResBlockMAE(in_channels, enc_dims[0], 5, 'same', winsize),
@@ -99,3 +99,45 @@ class MAEDelta(nn.Module):
         x[mask] = torch.randn(x.shape, device=x.device)[mask]       # set masked chunks to random values
         x = x.flatten(start_dim=2)                                  # get rid of chunk dim
         return x
+    
+class MAEDeltaClassifier(nn.Module):
+    def __init__(self, winsize, in_channels, enc_dims=(32,64,128), d_model=192, n_hl=100, weights_file=None, freeze=False):
+        super().__init__()
+
+        self.winsize = winsize
+        self.in_channels = in_channels
+        self.enc_dims = enc_dims
+        self.d_model = d_model
+        self.weights_file = weights_file
+        self.freeze = freeze
+
+        self.encoder = self.get_encoder()
+        self.classifier = nn.Sequential(
+            nn.AvgPool1d(kernel_size=winsize), # Nxenc_dimx1
+            nn.Flatten(start_dim=1), # Nxenc_dim
+            nn.Linear(in_features=self.enc_dims[-1], out_features=n_hl),
+            nn.ReLU(),
+            nn.Linear(in_features=n_hl, out_features=1)
+        )
+
+    def forward(self, x):
+        x = x.view(-1, self.in_channels, self.winsize)
+        x = self.encoder(x)
+        x = self.classifier(x)
+        return x
+
+    def get_encoder(self):
+        autoencoder = MAEDelta(self.winsize, self.in_channels, enc_dims=self.enc_dims, d_model=self.d_model)
+
+        if self.weights_file:
+            print("Model is loading pretrained encoder")
+            autoencoder.load_state_dict(torch.load(self.weights_file))
+        
+        encoder = autoencoder.e
+
+        if self.freeze:
+            print("Model is freezing encoder")
+            for p in encoder.parameters():
+                p.requires_grad = False
+        
+        return encoder

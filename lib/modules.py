@@ -264,7 +264,8 @@ def optimization_loop(
     patience: int = None,
     min_delta: float = 0.0001,
     outdir: Path = None,
-    label: str = ''
+    label: str = '',
+    writer = None
 ):
     if outdir:
         outdir = Path(outdir)
@@ -273,6 +274,9 @@ def optimization_loop(
         info_file = outdir / 'info.json'
         stats_dir = outdir / 'stats'
         stats_dir.mkdir()
+    
+    if writer:
+        writer = SummaryWriter(writer)
 
     train_loss = []
     dev_loss = []
@@ -345,10 +349,21 @@ def optimization_loop(
                     }, f, indent=4)
         plt.close()
 
+        if writer:
+            writer.add_scalar('Loss/train', train_loss[-1], epoch)
+            writer.add_scalar('Loss/dev', dev_loss[-1], epoch)
+            writer.add_scalar('Precision/dev', preci, epoch)
+            writer.add_scalar('Recall/dev', recalli, epoch)
+            writer.add_scalar('F1/dev', f1i, epoch)
+            writer.flush()
+
         # If we run out of patience, stop
         if patience and early_stop_counter >= patience:
             print(f'Early stopping at epoch {epoch}')
             break
+    
+    if writer:
+        writer.close()
         
 
 

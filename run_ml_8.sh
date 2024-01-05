@@ -2,16 +2,16 @@
 
 # Train autoencoder
 
-ae_args="epochs=100, outdir='dev/8_mae/delta_mask25', device='cuda:0', maskpct=0.25, label='Masked Autoencoder'"
+# ae_args="epochs=100, outdir='dev/8_mae/delta_mask25', device='cuda:0', maskpct=0.25, label='Masked Autoencoder'"
 run_func="train_mae_8"
-env/bin/python3 -c "from lib.run import $run_func; $run_func($ae_args)"
-wait
+# env/bin/python3 -c "from lib.run import $run_func; $run_func($ae_args)"
+# wait
 
-ae_args="epochs=100, outdir='dev/8_mae/delta_mask50', device='cuda:0', maskpct=0.50, label='Masked Autoencoder'"
-env/bin/python3 -c "from lib.run import $run_func; $run_func($ae_args)"
-wait
+# ae_args="epochs=100, outdir='dev/8_mae/delta_mask50', device='cuda:0', maskpct=0.50, label='Masked Autoencoder'"
+# env/bin/python3 -c "from lib.run import $run_func; $run_func($ae_args)"
+# wait
 
-ae_args="epochs=100, outdir='dev/8_mae/delta_mask75', device='cuda:0', maskpct=0.75, label='Masked Autoencoder'"
+ae_args="epochs=100, outdir='dev/8_mae/delta_mask75_10hrs', device='cuda:0', maskpct=0.75, label='Masked Autoencoder'"
 env/bin/python3 -c "from lib.run import $run_func; $run_func($ae_args)"
 
 # # Train classifier in 4 ways
