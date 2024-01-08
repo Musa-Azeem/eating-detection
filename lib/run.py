@@ -285,11 +285,12 @@ def train_mae_class_8(epochs, outdir, device, autoencoder_dir=None, freeze=True,
     encoderclass_dir = Path(outdir)
 
     winsize = 1001
+    n = 16
     nursing_trainloader, nursing_testloader = load_nursing(
         NURSING_RAW_DIR, 
         NURSING_LABEL_DIR, 
         winsize=winsize, 
-        n_sessions=16,
+        n_sessions=n,
         test_size=0.5, 
         batch_size=256,
     )
@@ -314,7 +315,7 @@ def train_mae_class_8(epochs, outdir, device, autoencoder_dir=None, freeze=True,
         min_delta=0.0001,
         outdir=encoderclass_dir,
         label=label,
-        writer=f'runs/delta_classifier/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_16sessions_{"frozen" if freeze else "unfrozen"}_{"pretrained" if autoencoder_dir else "untrained"}'
+        writer=f'runs/{autoencoder_dir.name}/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_{n}sessions_{"frozen" if freeze else "unfrozen"}_{"pretrained" if autoencoder_dir else "untrained"}'
     )
 
 from lib.models import ResNetClassifier, ResBlock

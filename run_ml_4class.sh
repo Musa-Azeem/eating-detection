@@ -2,14 +2,14 @@
 
 # Train autoencoder
 
-autoencoder_outdir="dev/8_mae/delta_mask75"
+autoencoder_outdir="dev/8_mae/delta_mask75_10hrs"
 
 
 # Train classifier in 4 ways
 epochs="100"
 
 run_func="train_mae_class_8"
-class_outdir="dev/8_mae/delta_mask75/classifiers"
+class_outdir="dev/8_mae/delta_mask75_10hrs/classifiers"
 
 # 1. Train classifier with pretrained, frozen encoder
 class1_args="epochs=${epochs}, outdir='${class_outdir}/1-pretrained-frozen', device='cuda:0', autoencoder_dir='${autoencoder_outdir}', freeze=True, label='1. Pretrained, frozen encoder'"

@@ -1,4 +1,4 @@
-from lib.data.datasets import AccAndLabelsDataset, AccRawDataset
+from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, FiveClassDataset
 import numpy as np
 from sklearn.model_selection import train_test_split
 from lib.modules import pad_for_windowing, read_nursing_session, read_nursing_labels, read_delta_session
@@ -8,6 +8,67 @@ import random
 from pathlib import Path
 import pandas as pd
 from datetime import timedelta
+import os
+import gdown
+from os.path import expanduser
+import pandas as pd
+import tarfile
+from tqdm import tqdm
+
+def load_nursing_5_class(nurses, winsize, test_size, batch_size):
+    not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+    unlabled_sessions = set.intersection(set(nurses), not_labeled)
+    if unlabled_sessions:
+        raise ValueError(f"Session indexes {unlabled_sessions} are not labled")
+
+    url = "https://drive.google.com/uc?id=1ZPVqr3cYLfR7i3fzwA0WSGbmeGVieP0D"
+    filename = "nursing.tar.gz"
+    home = expanduser("~")
+    outdir = f'{home}/.delta'
+    filepath = f'{outdir}/{filename}'
+
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+    if os.path.exists(filepath):
+        print(f'Already downloaded')
+    else:
+        gdown.download(url, filepath, quiet=False)
+    
+    if not os.path.exists(f'{outdir}/nursing'):
+        with tarfile.open(filepath) as tar:
+            tar.extractall(outdir)
+    
+    train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
+
+    Xtr = pd.DataFrame()
+    ytr = pd.DataFrame()
+    Xde = pd.DataFrame()
+    yde = pd.DataFrame()
+
+    for i in tqdm(nurses):
+        Xi = pd.read_csv(f'{outdir}/nursing/{i}.csv')
+        yi = Xi.pop('label')
+        # should really window here to avoid overlap
+
+        if i in train_idx:
+            Xtr = pd.concat([Xtr,Xi])
+            ytr = pd.concat([ytr,yi])
+        else:
+            Xde = pd.concat([Xde,Xi])
+            yde = pd.concat([yde,yi])
+
+    Xtr = torch.Tensor(Xtr.values)
+    ytr = torch.Tensor(ytr.values)
+    Xde = torch.Tensor(Xde.values)
+    yde = torch.Tensor(yde.values)
+
+    tr = FiveClassDataset(pad_for_windowing(Xtr, winsize), ytr, winsize)
+    de = FiveClassDataset(pad_for_windowing(Xde, winsize), yde, winsize)
+
+    trainloader = DataLoader(tr, batch_size=batch_size, shuffle=True, num_workers=2)
+    testloader = DataLoader(de, batch_size=batch_size, num_workers=2)
+
+    return trainloader, testloader
 
 def load_nursing(raw_dir, label_dir, winsize, n_sessions=None, session_idxs=None, test_size=0.25, batch_size=64, shuffle_test=False):
     not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 34, 70}
@@ -69,7 +130,7 @@ def load_nursing(raw_dir, label_dir, winsize, n_sessions=None, session_idxs=None
 
     return trainloader, testloader
 
-def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, test_size=0.25, batch_size=64, shuffle_test=False):
+def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, test_size=0.25, batch_size=64, shuffle_test=False, create_partition_ds=False):
     """
         1. Get list of N raw recording directories (from delta app, no labels)
         2. Read all raw data into N DataFrames of lengths l. Reset their timestamp to be seconds from the start. Print the length of each session
@@ -136,8 +197,13 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
     print(f"Total train length: {timedelta(seconds=len(acctr) / 100)} ({len(acctr)} Samples)")
     print(f"Total test length: {timedelta(seconds=len(accte) / 100)} ({len(accte)} Samples)")
 
-    Xtr = AccRawDataset(acctr, winsize)
-    Xte = AccRawDataset(accte, winsize)
+
+    if create_partition_ds:
+        Xtr = AccRawDatasetPartitioned(acctr[:len(acctr) - len(acctr) % winsize], winsize)
+        Xte = AccRawDatasetPartitioned(accte[:len(accte) - len(accte) % winsize], winsize)
+    else:
+        Xtr = AccRawDataset(acctr, winsize)
+        Xte = AccRawDataset(accte, winsize)
 
     trainloader = DataLoader(Xtr, batch_size=batch_size, shuffle=True, num_workers=4)
     testloader = DataLoader(Xte, batch_size=batch_size, shuffle=shuffle_test, num_workers=4)
