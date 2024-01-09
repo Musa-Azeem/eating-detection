@@ -9,6 +9,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from tabulate import tabulate
 import torch
+import numpy as np
 
 def metrics(y_true,y_pred):
     return {
@@ -109,7 +110,10 @@ def plot_and_save_losses(
     plt.ylabel("Loss")
     plt.xlabel('Epochs')
     plt.title(f'Train and Test Loss over {n_epochs} Epochs')
-    if f1:
+    if f1 is not None:
+        if isinstance(f1, np.ndarray):
+            f1 = f1.mean(axis=1).tolist()
+        
         plt.plot(f1, label='F1')
         plt.ylabel("Loss/F1")
         plt.title(f'Train and Test Loss/F1 over {n_epochs} Epochs')

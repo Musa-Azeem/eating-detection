@@ -20,6 +20,7 @@ import plotly.express as px
 import os
 import json
 from torch.utils.tensorboard import SummaryWriter
+import numpy as np
 
 # =============================================================================
 # =================== Nursing Data Loading and Processing =====================
@@ -355,6 +356,160 @@ def optimization_loop(
             writer.add_scalar('Precision/dev', preci, epoch)
             writer.add_scalar('Recall/dev', recalli, epoch)
             writer.add_scalar('F1/dev', f1i, epoch)
+            writer.flush()
+
+        # If we run out of patience, stop
+        if patience and early_stop_counter >= patience:
+            print(f'Early stopping at epoch {epoch}')
+            break
+    
+    if writer:
+        writer.close()
+
+def inner_evaluate_loop_multi_class(
+    model: nn.Module,
+    devloader: DataLoader,
+    criterion: nn.Module,
+    device: str
+) -> tuple[torch.Tensor, torch.Tensor, list[float]]:
+
+    y_preds = []
+    y_true = []
+    all_confs = []
+    dev_lossi = []
+
+    model.eval()
+    with torch.no_grad():
+        for X,y in devloader:
+            y_true.append(y)
+            X,y = X.to(device), y.to(device)
+            logits = model(X)
+            dev_lossi.append(criterion(logits, y).item())
+            confs = torch.softmax(logits, dim=1).detach().cpu()
+            all_confs.append(confs)
+            y_preds.append(torch.argmax(confs, dim=1))
+
+    return (
+        torch.cat(y_true), 
+        torch.cat(y_preds), 
+        torch.cat(all_confs), 
+        dev_lossi
+    )
+
+def optimization_loop_multi_class(
+    model: nn.Module,
+    trainloader: DataLoader,
+    devloader: DataLoader,
+    criterion: nn.Module,
+    optimizer: torch.optim.Optimizer, 
+    epochs: int,
+    device: str,
+    patience: int = None,
+    min_delta: float = 0.0001,
+    outdir: Path = None,
+    label: str = '',
+    writer = None,
+    class_map = {
+        'NONE':0,
+        'Eating':1,
+        'Exercise':2,
+        'Medication':3,
+        'Smoking':4,
+    }
+):
+    if outdir:
+        outdir = Path(outdir)
+        model_outdir = outdir / 'model'
+        model_outdir.mkdir(parents=True)
+        info_file = outdir / 'info.json'
+        stats_dir = outdir / 'stats'
+        stats_dir.mkdir()
+    
+    if writer:
+        writer = SummaryWriter(writer)
+
+    train_loss = []
+    dev_loss = []
+    prec = []
+    recall = []
+    f1 = np.zeros((0, len(class_map)))
+
+    lowest_loss = float('inf')
+    early_stop_counter = 0
+
+    pbar = tqdm(range(epochs))
+    for epoch in pbar:
+        lower = False
+
+        # Train Loop
+        train_lossi = inner_train_loop(model, trainloader, criterion, optimizer, device)
+        train_loss.append(sum(train_lossi) / len(trainloader))            
+
+        # Dev Loop
+        y_true, y_pred, confs, dev_lossi = inner_evaluate_loop_multi_class(model, devloader, criterion, device)
+        dev_loss.append(sum(dev_lossi) / len(devloader))
+
+        preci, recalli, f1i, _ = precision_recall_fscore_support(
+            y_true, y_pred, zero_division=0.0, pos_label=1, average=None
+        )
+        prec.append(preci)
+        recall.append(recalli)
+        f1 = np.concatenate([f1, f1i.reshape(1,-1)], axis=0)
+
+        pbar.set_description(f'{label}: Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
+
+        # Plot loss
+        plt.plot(train_loss)
+        plt.plot(dev_loss)
+        plt.plot(f1.mean(axis=1))
+        plt.savefig('running_loss.jpg')
+
+        # Early Stopping
+        if (lowest_loss - dev_loss[-1]) > min_delta:
+            # Sig diff, reset counter
+            early_stop_counter = 0
+        else:
+            # Not a sig diff, increment counter
+            early_stop_counter += 1
+
+        # Save lowest loss
+        if dev_loss[-1] < lowest_loss:
+            lower = True
+            lowest_loss = dev_loss[-1]
+        
+        if outdir:
+            torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
+            torch.save(train_loss, stats_dir / 'train_loss.pt')
+            torch.save(dev_loss, stats_dir / 'dev_loss.pt')
+            torch.save(prec, stats_dir / 'prec.pt')
+            torch.save(recall, stats_dir / 'recall.pt')
+            torch.save(f1, stats_dir / 'f1.pt')
+            plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'), f1=f1)
+
+            # Save model with lowest loss
+            if lower:
+                torch.save(model.state_dict(), outdir / f'best_model.pt')
+                with info_file.open('w') as f:
+                    json.dump({
+                        "best_model": epoch,
+                        "loss": lowest_loss,
+                        "precision": preci.tolist(),
+                        "recall": recalli.tolist(),
+                        "f1": f1i.tolist()
+                    }, f, indent=4)
+        plt.close()
+
+        if writer:
+            writer.add_scalar('Loss/train', train_loss[-1], epoch)
+            writer.add_scalar('Loss/dev', dev_loss[-1], epoch)
+            writer.add_scalar('Precision/dev', preci.mean(), epoch)
+            writer.add_scalar('Recall/dev', recalli.mean(), epoch)
+            writer.add_scalar('F1/dev', f1i.mean(), epoch)
+            writer.add_scalar('F1_class/dev-none', f1i[0], epoch)
+            writer.add_scalar('F1_class/dev-eating', f1i[1], epoch)
+            writer.add_scalar('F1_class/dev-exercise', f1i[2], epoch)
+            writer.add_scalar('F1_class/dev-medication', f1i[3], epoch)
+            writer.add_scalar('F1_class/dev-smoking', f1i[4], epoch)
             writer.flush()
 
         # If we run out of patience, stop

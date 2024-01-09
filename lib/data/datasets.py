@@ -1,4 +1,5 @@
 from torch.utils.data import Dataset
+import torch
 
 class AccRawDataset(Dataset):
     def __init__(self, X, winsize):
@@ -49,18 +50,30 @@ class AccAndLabelsDataset(Dataset):
     def __len__(self):
         return len(self.y)
     
-class FiveClassDataset(Dataset):
-    def __init__(self, X, y, winsize):
+class MultiClassDataset(Dataset):
+    def __init__(self, X, y, winsize, window=True):
         super().__init__()
+        self.window = window
         self.winsize = winsize
         self.X = X
         self.y = y
+
+        if window:
+            self.len = len(self.y)
+        else:
+            if len(X) % winsize != 0:
+                raise ValueError("Winsize must be a factor of the dataset length.")
+            self.X = X.view(-1, winsize, 3)
+            self.len = len(self.X)
 
     def __getitem__(self, i):
         if i >= self.__len__():
             raise IndexError("Index Out of Range")
 
-        return (self.X[i:i+self.winsize].T.flatten(), self.y[i])
+        if self.window:
+            return (self.X[i:i+self.winsize].T.flatten(), self.y[i])
+        else:
+            return (self.X[i].T.flatten(), torch.mode(self.y[i*self.winsize:(i+1)*self.winsize])[0])
     
     def __len__(self):
-        return len(self.y)
+        return self.len

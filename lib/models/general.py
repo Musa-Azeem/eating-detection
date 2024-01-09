@@ -174,3 +174,88 @@ class ResNetClassifier(nn.Module):
 #         x = self.r(x)
 #         x = self.o(x)
 #         return x
+
+
+def get_new_l(l,p,k,s,d=1):
+    return (l+2*p-d*(k-1)-1)//s + 1
+
+def get_padding(l,out_l,k,s,d=1):
+    if l % 2 == 0:
+        return ((out_l-1)*s - l + d*(k-1))//2 + 1
+    return ((out_l-1)*s - l + d*(k-1) + 1)//2 
+
+class ClassifierResBlockNew(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, seq_len, reduce=False):
+        super().__init__()
+
+        if reduce:
+            stride = 2
+            self.seq_len = seq_len // 2 if seq_len % 2 == 0 else seq_len // 2 + 1
+        else:
+            stride = 1
+            self.seq_len = seq_len
+        padding = get_padding(seq_len, self.seq_len, kernel_size, stride)
+
+        self.c = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, stride=stride),
+            nn.LayerNorm((self.seq_len)),
+            nn.ReLU(),
+            nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, padding=padding),
+            nn.LayerNorm((self.seq_len)),
+            nn.ReLU(),
+        )
+        self.identity = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=1, padding=0, stride=stride),
+            nn.LayerNorm((self.seq_len))
+        )
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        return self.relu(self.identity(x) + self.c(x))
+
+class TripleResBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, seq_len):
+        super().__init__()
+        self.r1 = ClassifierResBlockNew(in_channels, out_channels, kernel_size, seq_len, reduce=True)
+        self.r2 = ClassifierResBlockNew(out_channels, out_channels, kernel_size, self.r1.seq_len)
+        self.r3 = ClassifierResBlockNew(out_channels, out_channels, kernel_size, self.r2.seq_len)
+        self.r = nn.Sequential(self.r1, self.r2, self.r3)
+        self.seq_len = self.r3.seq_len
+
+    def forward(self, x):
+        return self.r(x)
+    
+class ResNetClassifierFiveClass(nn.Module):
+    def __init__(self, winsize, in_channels, dims):
+        super().__init__()
+        self.winsize = winsize
+        self.in_channels = in_channels
+        self.dims = dims
+        self.dims_str = '-'.join([str(d) for d in dims])
+        # self.dims = [self.in_channels] + list(dims)
+
+        self.rs = []
+        for i in range(len(self.dims)-1):
+            if i == 0:
+                self.rs.append(TripleResBlock(self.dims[i], self.dims[i+1], 3, winsize))
+            else:
+                self.rs.append(TripleResBlock(self.dims[i], self.dims[i+1], 3, self.rs[i-1].seq_len))
+
+        self.e = nn.Sequential(
+            nn.Conv1d(in_channels, dims[0], kernel_size=9, padding='same'),
+            nn.LayerNorm((winsize)),
+            nn.ReLU(),
+            *self.rs
+        )
+
+        self.o = nn.Sequential(
+            nn.AvgPool1d(kernel_size=self.rs[-1].seq_len if self.rs else winsize), # Nxdims[-1]x1
+            nn.Flatten(start_dim=1), # Nxdims[-1]
+            nn.Linear(in_features=self.dims[-1], out_features=5)
+        )
+
+    def forward(self, x):
+        x = x.view(-1, self.in_channels, self.winsize)
+        x = self.e(x)
+        x = self.o(x)
+        return x

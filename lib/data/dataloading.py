@@ -1,4 +1,4 @@
-from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, FiveClassDataset
+from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, MultiClassDataset
 import numpy as np
 from sklearn.model_selection import train_test_split
 from lib.modules import pad_for_windowing, read_nursing_session, read_nursing_labels, read_delta_session
@@ -15,7 +15,7 @@ import pandas as pd
 import tarfile
 from tqdm import tqdm
 
-def load_nursing_5_class(nurses, winsize, test_size, batch_size):
+def load_nursing_5_class(nurses, winsize, test_size, batch_size, window=True):
     not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
     unlabled_sessions = set.intersection(set(nurses), not_labeled)
     if unlabled_sessions:
@@ -58,12 +58,16 @@ def load_nursing_5_class(nurses, winsize, test_size, batch_size):
             yde = pd.concat([yde,yi])
 
     Xtr = torch.Tensor(Xtr.values)
-    ytr = torch.Tensor(ytr.values)
+    ytr = torch.Tensor(ytr.values).squeeze().long()
     Xde = torch.Tensor(Xde.values)
-    yde = torch.Tensor(yde.values)
+    yde = torch.Tensor(yde.values).squeeze().long()
 
-    tr = FiveClassDataset(pad_for_windowing(Xtr, winsize), ytr, winsize)
-    de = FiveClassDataset(pad_for_windowing(Xde, winsize), yde, winsize)
+    if window:
+        tr = MultiClassDataset(pad_for_windowing(Xtr, winsize), ytr, winsize)
+        de = MultiClassDataset(pad_for_windowing(Xde, winsize), yde, winsize)
+    else:
+        tr = MultiClassDataset(Xtr[:len(Xtr) - len(Xtr) % winsize], ytr, winsize, window=False)
+        de = MultiClassDataset(Xde[:len(Xde) - len(Xde) % winsize], yde, winsize, window=False)
 
     trainloader = DataLoader(tr, batch_size=batch_size, shuffle=True, num_workers=2)
     testloader = DataLoader(de, batch_size=batch_size, num_workers=2)

@@ -42,32 +42,6 @@ def pipeline():
     torch.save(ys['pred'], 'pred.pt')
     pd.DataFrame({'pred': ys['pred'].flatten().numpy()}).to_csv('pred.csv', index=False)
 
-def train_resnet(epochs, outdir, device, label=''):
-    WINSIZE = 101
-    DEVICE = device
-
-    model = ResNetClassifier(winsize=WINSIZE, in_channels=3).to(DEVICE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
-    criterion = nn.BCEWithLogitsLoss()
-
-    nursing_trainloader = torch.load('pytorch_datasets/nursing_trainloader_11-25-23.pt')
-    nursing_testloader = torch.load('pytorch_datasets/nursing_testloader_11-25-23.pt')
-
-    optimization_loop(
-        model, 
-        nursing_trainloader, 
-        nursing_testloader, 
-        criterion, 
-        optimizer, 
-        epochs, 
-        DEVICE, 
-        patience=30,
-        min_delta=0.0001,
-        outdir=outdir,
-        label=label
-    )
-
-
 def train_autoencoder(epochs, outdir, device, label=''):
     WINSIZE = 101
     DEVICE = device
@@ -182,7 +156,7 @@ def train_autoencoder_6(epochs, outdir, device, label=''):
 
 from lib.models import MAEAlpha, MAEAlphaClassifier, MAEBeta, MAEBetaClassifier, MAEGamma, MAEDelta, MAEDeltaClassifier
 from lib.config import RAW_DIR, NURSING_RAW_DIR, NURSING_LABEL_DIR
-from lib.data.dataloading import load_raw
+from lib.data.dataloading import load_raw, load_nursing_5_class
 def train_mae_7(epochs, outdir, device, label=''):
     winsize = 1001
     autoencoder_dir = Path(outdir)
@@ -285,13 +259,13 @@ def train_mae_class_8(epochs, outdir, device, autoencoder_dir=None, freeze=True,
     encoderclass_dir = Path(outdir)
 
     winsize = 1001
-    n = 16
+    # n = 16
     nursing_trainloader, nursing_testloader = load_nursing(
         NURSING_RAW_DIR, 
         NURSING_LABEL_DIR, 
         winsize=winsize, 
-        n_sessions=n,
-        test_size=0.5, 
+        # n_sessions=n,
+        test_size=0.2, 
         batch_size=256,
     )
 
@@ -315,7 +289,35 @@ def train_mae_class_8(epochs, outdir, device, autoencoder_dir=None, freeze=True,
         min_delta=0.0001,
         outdir=encoderclass_dir,
         label=label,
-        writer=f'runs/{autoencoder_dir.name}/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_{n}sessions_{"frozen" if freeze else "unfrozen"}_{"pretrained" if autoencoder_dir else "untrained"}'
+        writer=f'runs/delta_mask75_10hrs/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_all-sessions_{"frozen" if freeze else "unfrozen"}_{"pretrained" if autoencoder_dir else "untrained"}'
+    )
+
+def train_resnet(epochs, outdir, device, label=''):
+    winsize = 1001
+
+    nursing_trainloader, nursing_testloader = load_nursing_5_class(
+        range(11,13),
+        winsize,
+        test_size=0.2,
+        batch_size=256
+    )
+
+    model = ResNetClassifier(winsize, 3, (4,)).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    criterion = nn.BCEWithLogitsLoss()
+
+    optimization_loop(
+        model, 
+        nursing_trainloader, 
+        nursing_testloader, 
+        criterion, optimizer, 
+        epochs, 
+        device, 
+        patience=10,
+        min_delta=0.0001,
+        outdir=outdir,
+        label=label,
+        # writer=f'runs/classifiers/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_resnet4-8-16'
     )
 
 from lib.models import ResNetClassifier, ResBlock
