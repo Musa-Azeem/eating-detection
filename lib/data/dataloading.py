@@ -62,6 +62,7 @@ def load_nursing_5_class(nurses, winsize, test_size, batch_size, window=True):
     Xde = torch.Tensor(Xde.values)
     yde = torch.Tensor(yde.values).squeeze().long()
 
+    print(Xtr.shape, ytr.shape, Xde.shape, yde.shape)
     if window:
         tr = MultiClassDataset(pad_for_windowing(Xtr, winsize), ytr, winsize)
         de = MultiClassDataset(pad_for_windowing(Xde, winsize), yde, winsize)

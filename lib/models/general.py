@@ -210,7 +210,8 @@ class ClassifierResBlockNew(nn.Module):
         self.identity = nn.Sequential(
             nn.Conv1d(in_channels, out_channels, kernel_size=1, padding=0, stride=stride),
             nn.LayerNorm((self.seq_len))
-        )
+        ) if reduce else nn.Identity()
+
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -246,7 +247,7 @@ class XBlock(nn.Module):
             nn.Conv1d(in_channels, out_channels, kernel_size=1, padding=0, stride=stride),
             nn.LayerNorm((self.seq_len)),
             nn.ReLU()
-        )
+        ) if out_channels > in_channels else nn.Identity()
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -264,8 +265,7 @@ class ResNetClassifierFiveClass(nn.Module):
         self.rs = []
         for i in range(len(self.dims)-1):
             reduce = self.dims[i+1] > self.dims[i]
-            # self.rs.append(ClassifierResBlockNew(self.dims[i], self.dims[i+1], 3, self.rs[i-1].seq_len if i>0 else winsize, p_dropout=p_dropout, reduce=reduce))
-            self.rs.append(XBlock(self.dims[i], self.dims[i+1], 3, self.rs[i-1].seq_len if i>0 else winsize, b=2, g=4, p_dropout=p_dropout))
+            self.rs.append(ClassifierResBlockNew(self.dims[i], self.dims[i+1], 3, self.rs[i-1].seq_len if i>0 else winsize, p_dropout=p_dropout, reduce=reduce))
 
         self.e = nn.Sequential(
             nn.Conv1d(in_channels, dims[0], kernel_size=3, padding='same'),
@@ -285,7 +285,94 @@ class ResNetClassifierFiveClass(nn.Module):
         x = self.e(x)
         x = self.o(x)
         return x
-    
+
+class ResNetClassifierFiveClassXBlock(nn.Module):
+    def __init__(self, winsize, in_channels, dims, b, g, p_dropout=None):
+        super().__init__()
+        self.winsize = winsize
+        self.in_channels = in_channels
+        self.dims = dims
+        self.dims_str = '-'.join([str(d) for d in dims])
+        self.p_dropout = p_dropout
+        # self.dims = [self.in_channels] + list(dims)
+
+        self.rs = []
+        for i in range(len(self.dims)-1):
+            reduce = self.dims[i+1] > self.dims[i]
+            self.rs.append(XBlock(self.dims[i], self.dims[i+1], 3, self.rs[i-1].seq_len if i>0 else winsize, b=b, g=g, p_dropout=p_dropout))
+
+        self.e = nn.Sequential(
+            nn.Conv1d(in_channels, dims[0], kernel_size=3, padding='same'),
+            nn.LayerNorm((winsize)),
+            nn.ReLU(),
+            *self.rs
+        )
+
+        self.o = nn.Sequential(
+            nn.AvgPool1d(kernel_size=self.rs[-1].seq_len if self.rs else winsize), # Nxdims[-1]x1
+            nn.Flatten(start_dim=1), # Nxdims[-1]
+            nn.Linear(in_features=self.dims[-1], out_features=5)
+        )
+
+    def forward(self, x):
+        x = x.view(-1, self.in_channels, self.winsize)
+        x = self.e(x)
+        x = self.o(x)
+        return x
+
+class RegNetNoX(nn.Module):
+    def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, p_dropout=None):
+        """
+            stem_out_c: out channels of stem before first stage
+            d: tuple of num blocks in each stage
+            w: tuple of num channels in each stage
+        """        
+        super().__init__()
+        self.winsize = winsize
+        self.in_channels = in_channels
+        self.stem_out_c = stem_out_c
+        self.n_stage = len(d)
+        if len(w) != len(d):
+            raise ValueError('d and w must have same length')
+        
+        self.d_str = '-'.join([str(di) for di in d])
+        self.w_str = '-'.join([str(wi) for wi in w])
+        self.p_dropout = p_dropout
+
+        s = nn.Sequential()
+        w = [stem_out_c] + list(w)
+        stem_out_len = winsize // 2 if winsize % 2 == 0 else winsize // 2 + 1
+        for i in range(self.n_stage):
+            rs = nn.Sequential()
+            for j in range(d[i]):
+                rs.add_module(f'stage-{i}_block-{j}', ClassifierResBlockNew(
+                    w[i] if j==0 else w[i+1], 
+                    w[i+1], 
+                    kernel_size=3, 
+                    seq_len=rs[-1].seq_len if j>0 else s[-1][-1].seq_len if i>0 else stem_out_len, 
+                    p_dropout=p_dropout
+                ))
+            s.add_module(f'stage-{i}', rs)
+
+        self.e = nn.Sequential(
+            nn.Conv1d(in_channels, stem_out_c, kernel_size=3, stride=2, padding=1),
+            nn.LayerNorm((stem_out_len)),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=2,stride=2),
+            s
+        )
+
+        self.o = nn.Sequential(
+            nn.AvgPool1d(kernel_size=rs[-1].seq_len if rs else stem_out_len), # Nxdims[-1]x1
+            nn.Flatten(start_dim=1), # Nxdims[-1]
+            nn.Linear(in_features=w[-1], out_features=5)
+        )
+
+    def forward(self, x):
+        x = x.view(-1, self.in_channels, self.winsize)
+        x = self.e(x)
+        x = self.o(x)
+        return x    
 class RegNet(nn.Module):
     def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, b, g, p_dropout=None):
         """
@@ -296,12 +383,15 @@ class RegNet(nn.Module):
         super().__init__()
         self.winsize = winsize
         self.in_channels = in_channels
+        self.stem_out_c = stem_out_c
         self.n_stage = len(d)
         if len(w) != len(d):
             raise ValueError('d and w must have same length')
         
         self.d_str = '-'.join([str(di) for di in d])
         self.w_str = '-'.join([str(wi) for wi in w])
+        self.g = g
+        self.b = b
         self.p_dropout = p_dropout
 
         s = nn.Sequential()
@@ -331,7 +421,7 @@ class RegNet(nn.Module):
         self.o = nn.Sequential(
             nn.AvgPool1d(kernel_size=rs[-1].seq_len if rs else stem_out_len), # Nxdims[-1]x1
             nn.Flatten(start_dim=1), # Nxdims[-1]
-            nn.Linear(in_features=w[-1], out_features=1)
+            nn.Linear(in_features=w[-1], out_features=5)
         )
 
     def forward(self, x):
