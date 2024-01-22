@@ -116,7 +116,7 @@ def get_out_padding(in_seq, out_seq):
         return 1 if out_seq % 2 == 0 else 0
     
 class RegNetMAE(nn.Module):
-    def __init__(self, winsize, in_channels, stem_out_c, mask_chunk_size, d: tuple, w: tuple, d_model, b=1, g=1, p_dropout=None, maskpct=0.75):
+    def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, d_model, b=1, g=1, p_dropout=None, maskpct=0.75):
         super().__init__()
         if len(w) != len(d):
             raise ValueError('d and w must have same length')
@@ -130,7 +130,6 @@ class RegNetMAE(nn.Module):
         self.p_dropout = p_dropout
 
         self.d_model = d_model
-        self.mask_chunk_size = mask_chunk_size
         self.maskpct = maskpct
         
         w = [stem_out_c] + list(w)
@@ -193,7 +192,7 @@ class RegNetMAE(nn.Module):
                 ))
             ds.add_module(f'd_stage-{len(d)-i-1}', rs)
 
-        dec = nn.Sequential(
+        self.dec = nn.Sequential(
             ds,
             nn.ConvTranspose1d(w[0], in_channels, kernel_size=3, stride=2, padding=1, output_padding=get_out_padding(stem_out_len, winsize)),
         )
@@ -207,11 +206,14 @@ class RegNetMAE(nn.Module):
         return x.flatten(start_dim=1)
     
     def mask(self, x):
-        # Mask: split X into chunks and randomly set maskpct% of chunks 
-        # (all 64 dims) to values from a normal distribution
-        x = x.view(x.shape[0], x.shape[1], x.shape[2]//self.mask_chunk_size, -1).clone()
-        mask = torch.rand(x.shape[0], 1, x.shape[2]) < self.maskpct # maskpct% of values are True
-        mask = mask.expand(-1, x.shape[1], -1)                      # expand to all 64 dims
-        x[mask] = torch.randn(x.shape, device=x.device)[mask]       # set masked chunks to random values
-        x = x.flatten(start_dim=2)                                  # get rid of chunk dim
+        # Mask: split X into chunks of mask_len size and randomly set maskpct% 
+        # of chunks (all channels) to values from a normal distribution
+        mask_len = 10
+        n_chunks = x.shape[2] // mask_len
+        chunked = list(torch.split(x, n_chunks, dim=2))
+        mask = torch.rand(len(chunked), x.shape[0]) < 0.75 # maskpct% of values are True
+        for i,mi in enumerate(mask):
+            chunked[i] = chunked[i].clone()
+            chunked[i][mi] = torch.zeros_like(chunked[i][mi], device=x.device)
+        x = torch.cat(chunked, dim=2)
         return x
