@@ -116,7 +116,7 @@ def get_out_padding(in_seq, out_seq):
         return 1 if out_seq % 2 == 0 else 0
     
 class RegNetMAE(nn.Module):
-    def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, d_model, b=1, g=1, p_dropout=None, maskpct=0.75):
+    def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, d_model, b=1, g=1, p_dropout=None, maskpct=0.75, ntrans=1, nhead=1):
         super().__init__()
         if len(w) != len(d):
             raise ValueError('d and w must have same length')
@@ -128,6 +128,10 @@ class RegNetMAE(nn.Module):
         self.d_str = '-'.join([str(di) for di in d])
         self.w_str = '-'.join([str(wi) for wi in w])
         self.p_dropout = p_dropout
+        self.b = b
+        self.g = g
+        self.ntrans = ntrans
+        self.nhead = nhead
 
         self.d_model = d_model
         self.maskpct = maskpct
@@ -164,8 +168,8 @@ class RegNetMAE(nn.Module):
             Permute(0,2,1),
             PositionalEncoding(d_model, seq_len=trans_seq_len),
             nn.TransformerEncoder(
-                nn.TransformerEncoderLayer(d_model, 1, 2048, 0.1, batch_first=True), 
-                1,
+                nn.TransformerEncoderLayer(d_model, nhead, 2048, 0.1, batch_first=True), 
+                num_layers=ntrans,
                 enable_nested_tensor=False
             ),
             Permute(0,2,1),
@@ -188,7 +192,7 @@ class RegNetMAE(nn.Module):
                     b=1, 
                     g=1, 
                     relu=True,
-                    p_dropout=0.1
+                    p_dropout=0.01
                 ))
             ds.add_module(f'd_stage-{len(d)-i-1}', rs)
 

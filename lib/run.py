@@ -292,6 +292,38 @@ def train_mae_class_8(epochs, outdir, device, autoencoder_dir=None, freeze=True,
         writer=f'runs/delta_mask75_10hrs/{datetime.now().strftime("%Y-%m-%d_%H:%M:%S")}_all-sessions_{"frozen" if freeze else "unfrozen"}_{"pretrained" if autoencoder_dir else "untrained"}'
     )
 
+def train_mae_9(epochs, outdir, device, label=''):
+    winsize = 3001
+    autoencoder_dir = Path(outdir)
+
+    model = RegNetMAE(winsize, 3, 4, (2,2,2), (64,128,256), d_model=256, b=1, g=2, p_dropout=0.1, ntrans=4, nhead=2).to(device)
+    criterion = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+
+    stride = winsize
+    trainloader, testloader = load_raw(
+        RAW_DIR,
+        winsize,
+        test_size=0.2,
+        batch_size=128,
+        shuffle_test=True,
+        chunk_len_hrs=0.25,
+        stride=stride
+    )
+
+    optimization_loop_xonly(
+        model,
+        trainloader,
+        testloader,
+        criterion,
+        optimizer,
+        epochs=epochs,
+        # patience=100,
+        device=device,
+        outdir=f'{autoencoder_dir}/{str(type(model)).split(".")[-1][:-2]}_win{winsize}_stride{stride}_so{model.stem_out_c}_d{model.d_str}_w{model.w_str}' + (f'_b{model.b}_g{model.g}' if isinstance(model, RegNetMAE) else '') + (f'_p{model.p_dropout}' if model.p_dropout else '') + f'_ntl{model.ntrans}_nth{model.nhead}_dmodel{model.d_model}',
+        writer=f'runs/test-mae-regnet/{str(type(model)).split(".")[-1][:-2]}_win{winsize}_stride{stride}_so{model.stem_out_c}_d{model.d_str}_w{model.w_str}' + (f'_b{model.b}_g{model.g}' if isinstance(model, RegNetMAE) else '') + (f'_p{model.p_dropout}' if model.p_dropout else '') + f'_ntl{model.ntrans}_nth{model.nhead}_dmodel{model.d_model}'
+    )
+
 def train_resnet(epochs, outdir, device, label=''):
     winsize = 1001
 

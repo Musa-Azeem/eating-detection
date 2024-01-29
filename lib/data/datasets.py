@@ -33,6 +33,22 @@ class AccRawDatasetPartitioned(Dataset):
     
     def __len__(self):
         return len(self.X)
+
+class AccRawDatasetStrided(Dataset):
+    def __init__(self, X, winsize, stride):
+        super().__init__()
+        self.winsize = winsize
+        self.stride = stride
+        self.X = X
+    
+    def __getitem__(self, i):
+        if i >= self.__len__():
+            raise IndexError("Index Out of Range")
+
+        return self.X[i*self.stride:i*self.stride+self.winsize].T.flatten()
+
+    def __len__(self):
+        return (len(self.X) - self.winsize) // self.stride + 1
     
 class AccAndLabelsDataset(Dataset):
     def __init__(self, X, y, winsize):

@@ -1,4 +1,4 @@
-from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, MultiClassDataset
+from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, AccRawDatasetStrided, MultiClassDataset
 import numpy as np
 from sklearn.model_selection import train_test_split
 from lib.modules import pad_for_windowing, read_nursing_session, read_nursing_labels, read_delta_session
@@ -135,7 +135,7 @@ def load_nursing(raw_dir, label_dir, winsize, n_sessions=None, session_idxs=None
 
     return trainloader, testloader
 
-def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, test_size=0.25, batch_size=64, shuffle_test=False, create_partition_ds=False):
+def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, test_size=0.25, batch_size=64, shuffle_test=False, stride=1):
     """
         1. Get list of N raw recording directories (from delta app, no labels)
         2. Read all raw data into N DataFrames of lengths l. Reset their timestamp to be seconds from the start. Print the length of each session
@@ -202,13 +202,8 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
     print(f"Total train length: {timedelta(seconds=len(acctr) / 100)} ({len(acctr)} Samples)")
     print(f"Total test length: {timedelta(seconds=len(accte) / 100)} ({len(accte)} Samples)")
 
-
-    if create_partition_ds:
-        Xtr = AccRawDatasetPartitioned(acctr[:len(acctr) - len(acctr) % winsize], winsize)
-        Xte = AccRawDatasetPartitioned(accte[:len(accte) - len(accte) % winsize], winsize)
-    else:
-        Xtr = AccRawDataset(acctr, winsize)
-        Xte = AccRawDataset(accte, winsize)
+    Xtr = AccRawDatasetStrided(acctr, winsize, stride=stride)
+    Xte = AccRawDatasetStrided(accte, winsize, stride=stride)
 
     trainloader = DataLoader(Xtr, batch_size=batch_size, shuffle=True, num_workers=4)
     testloader = DataLoader(Xte, batch_size=batch_size, shuffle=shuffle_test, num_workers=4)

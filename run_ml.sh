@@ -2,8 +2,8 @@
 
 # Train autoencoder
 
-ae_args="epochs=100, outdir='dev/7_mae/gamma_smaller_25', device='cuda:0', label='Masked Autoencoder'"
-run_func="train_mae_7"
+ae_args="epochs=2500, outdir='dev/9_regnet-mae/dev', device='cuda:0', label='Masked Autoencoder'"
+run_func="train_mae_9"
 env/bin/python3 -c "from lib.run import $run_func; $run_func($ae_args)"
 
 # # Train classifier in 4 ways
