@@ -115,6 +115,7 @@ def get_out_padding(in_seq, out_seq):
     else:
         return 1 if out_seq % 2 == 0 else 0
     
+import math
 class RegNetMAE(nn.Module):
     def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, d_model, b=1, g=1, p_dropout=None, maskpct=0.75, ntrans=1, nhead=1):
         super().__init__()
@@ -137,7 +138,8 @@ class RegNetMAE(nn.Module):
         self.maskpct = maskpct
         
         w = [stem_out_c] + list(w)
-        stem_out_len = winsize // 2 if winsize % 2 == 0 else winsize // 2 + 1
+        stem_pre_ln = math.floor(((winsize-1))/2+1)
+        stem_out_len = math.floor(((stem_pre_ln-3))/2+1)
 
         s = nn.Sequential()
         for i in range(self.n_stage):
@@ -157,7 +159,8 @@ class RegNetMAE(nn.Module):
 
         self.e = nn.Sequential(
             nn.Conv1d(in_channels, stem_out_c, kernel_size=3, stride=2, padding=1),
-            nn.LayerNorm((stem_out_len)),
+            nn.LayerNorm((stem_pre_ln)),
+            nn.MaxPool1d(kernel_size=2,stride=2),
             nn.ReLU(),
             s
         )
@@ -198,6 +201,7 @@ class RegNetMAE(nn.Module):
 
         self.dec = nn.Sequential(
             ds,
+            nn.Upsample(size=stem_pre_ln, mode='linear'),
             nn.ConvTranspose1d(w[0], in_channels, kernel_size=3, stride=2, padding=1, output_padding=get_out_padding(stem_out_len, winsize)),
         )
 
@@ -215,7 +219,7 @@ class RegNetMAE(nn.Module):
         mask_len = 10
         n_chunks = x.shape[2] // mask_len
         chunked = list(torch.split(x, n_chunks, dim=2))
-        mask = torch.rand(len(chunked), x.shape[0]) < 0.75 # maskpct% of values are True
+        mask = torch.rand(len(chunked), x.shape[0]) < self.maskpct # maskpct% of values are True
         for i,mi in enumerate(mask):
             chunked[i] = chunked[i].clone()
             chunked[i][mi] = torch.zeros_like(chunked[i][mi], device=x.device)

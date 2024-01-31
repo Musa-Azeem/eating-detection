@@ -93,3 +93,23 @@ class MultiClassDataset(Dataset):
     
     def __len__(self):
         return self.len
+
+DATA_DIR = f'{os.path.expanduser("~")}/.delta/nursing_pt'
+class WindowedDatasetWithStrideAndModeOfLabel(torch.utils.data.Dataset):
+    def __init__(self, nurse, windowsize=1, stride=1):
+        self.windowsize = windowsize
+        self.stride = stride
+        self.channels = 3
+        self.X,self.y = torch.load(f'{DATA_DIR}/{nurse}.pt')
+        self.len = math.ceil(len(self.X)/self.stride)
+        
+        self.X = torch.cat([self.X,torch.zeros(self.windowsize-1,3)])
+
+    def __len__(self):
+        return self.len
+
+    def __getitem__(self, idx):
+        return (
+            self.X[(idx*self.stride):(idx*self.stride)+self.windowsize].transpose(0,1),
+            self.y[(idx*self.stride):(idx*self.stride)+self.windowsize].mode().values
+        )

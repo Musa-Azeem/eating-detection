@@ -373,8 +373,10 @@ class RegNetNoX(nn.Module):
         x = self.e(x)
         x = self.o(x)
         return x    
+
+import math
 class RegNet(nn.Module):
-    def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, b, g, p_dropout=None):
+    def __init__(self, winsize, in_channels, stem_out_c, d: list, w: list, b, g, p_dropout=None):
         """
             stem_out_c: out channels of stem before first stage
             d: tuple of num blocks in each stage
@@ -396,7 +398,10 @@ class RegNet(nn.Module):
 
         s = nn.Sequential()
         w = [stem_out_c] + list(w)
-        stem_out_len = winsize // 2 if winsize % 2 == 0 else winsize // 2 + 1
+
+        stem_pre_ln = math.floor(((winsize-1))/2+1)
+        stem_out_len = math.floor(((stem_pre_ln-3))/2+1)
+        
         for i in range(self.n_stage):
             rs = nn.Sequential()
             for j in range(d[i]):
@@ -413,7 +418,8 @@ class RegNet(nn.Module):
 
         self.e = nn.Sequential(
             nn.Conv1d(in_channels, stem_out_c, kernel_size=3, stride=2, padding=1),
-            nn.LayerNorm((stem_out_len)),
+            nn.LayerNorm((stem_pre_ln)),
+            nn.MaxPool1d(kernel_size=2,stride=2),
             nn.ReLU(),
             s
         )

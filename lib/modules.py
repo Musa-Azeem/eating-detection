@@ -539,28 +539,41 @@ def optimization_loop_xonly(
     min_delta: float = 0.0001,
     outdir: Path = None,
     label: str = '',
-    writer = None
+    writer = None,
+    config = None,
+    continue_training = False
 ):
+    train_loss = []
+    dev_loss = []
+    info = {'Best Model': -1, 'Loss': -1, 'Latest Epoch': 0}
+    s = 0
     if outdir:
         outdir = Path(outdir)
         model_outdir = outdir / 'model'
-        model_outdir.mkdir(parents=True)
-        info_file = Path(outdir / 'info.txt')
+        info_file = Path(outdir / 'info.json')
         stats_dir = outdir / 'stats'
-        stats_dir.mkdir()
-        with info_file.open('w') as f:
-            f.write("Best Model: ")
+        
+        if not continue_training:
+            model_outdir.mkdir(parents=True)
+            stats_dir.mkdir()
+            with info_file.open('w') as f:
+                json.dump(info, f, indent=4)
+            with (outdir / 'config.json').open('w') as f:
+                json.dump(config, f, indent=4)
+        if continue_training:
+            model.load_state_dict(torch.load(outdir / 'best_model.pt'))
+            train_loss = torch.load(stats_dir / 'train_loss.pt')
+            dev_loss = torch.load(stats_dir / 'dev_loss.pt')
+            info = json.load(info_file.open())
+            s = info['Latest Epoch'] + 1
     
     if writer:
         writer = SummaryWriter(writer)    
 
-    train_loss = []
-    dev_loss = []
-
     lowest_loss = float('inf')
     early_stop_counter = 0
 
-    pbar = tqdm(range(epochs))
+    pbar = tqdm(range(s, s+epochs))
     for epoch in pbar:
         lower = False
 
@@ -593,16 +606,22 @@ def optimization_loop_xonly(
             lowest_loss = dev_loss[-1]
 
         if outdir:
-            torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
-            torch.save(train_loss, stats_dir / 'train_loss.pt')
-            torch.save(dev_loss, stats_dir / 'dev_loss.pt')
+            if epoch % 10 == 0:
+                torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
+                torch.save(train_loss, stats_dir / 'train_loss.pt')
+                torch.save(dev_loss, stats_dir / 'dev_loss.pt')
             plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'))
 
             # Save model with lowest loss
             if lower:
                 torch.save(model.state_dict(), outdir / f'best_model.pt')
-                with info_file.open('w') as f:
-                    f.write(f"Best Model: {epoch}\nLoss: {lowest_loss}")   
+                info['Best Model'] = epoch
+                info['Loss'] = lowest_loss
+                
+            info['Latest Epoch'] = epoch
+            with info_file.open('w') as f:
+                json.dump(info, f, indent=4)
+
         plt.close()
 
         if writer:

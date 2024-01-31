@@ -1,9 +1,9 @@
-from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, AccRawDatasetStrided, MultiClassDataset
+from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, AccRawDatasetStrided, MultiClassDataset, WindowedDatasetWithStrideAndModeOfLabel
 import numpy as np
 from sklearn.model_selection import train_test_split
 from lib.modules import pad_for_windowing, read_nursing_session, read_nursing_labels, read_delta_session
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, ConcatDataset
 import random
 from pathlib import Path
 import pandas as pd
@@ -15,65 +15,84 @@ import pandas as pd
 import tarfile
 from tqdm import tqdm
 
-def load_nursing_5_class(nurses, winsize, test_size, batch_size, window=True):
+def load_nursing_5_class(nurses, winsize, test_size, batch_size, stride=1):
     not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
     unlabled_sessions = set.intersection(set(nurses), not_labeled)
     if unlabled_sessions:
         raise ValueError(f"Session indexes {unlabled_sessions} are not labled")
 
-    url = "https://drive.google.com/uc?id=1ZPVqr3cYLfR7i3fzwA0WSGbmeGVieP0D"
-    filename = "nursing.tar.gz"
-    home = expanduser("~")
-    outdir = f'{home}/.delta'
-    filepath = f'{outdir}/{filename}'
-
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-    if os.path.exists(filepath):
-        print(f'Already downloaded')
+    if stride == 'partition':
+        stride = winsize
+    if test_size == 0:
+        train_idx = nurses
+        dev_idx = []
     else:
-        gdown.download(url, filepath, quiet=False)
+        train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
+    print(train_idx,dev_idx)
+    trainloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in train_idx]),batch_size=batch_size,shuffle=True)
+    devloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in dev_idx]),batch_size=batch_size,shuffle=False)
     
-    if not os.path.exists(f'{outdir}/nursing'):
-        with tarfile.open(filepath) as tar:
-            tar.extractall(outdir)
+    return trainloader, devloader
+
+# def load_nursing_5_class(nurses, winsize, test_size, batch_size, window=True):
+#     not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+#     unlabled_sessions = set.intersection(set(nurses), not_labeled)
+#     if unlabled_sessions:
+#         raise ValueError(f"Session indexes {unlabled_sessions} are not labled")
+
+#     url = "https://drive.google.com/uc?id=1ZPVqr3cYLfR7i3fzwA0WSGbmeGVieP0D"
+#     filename = "nursing.tar.gz"
+#     home = expanduser("~")
+#     outdir = f'{home}/.delta'
+#     filepath = f'{outdir}/{filename}'
+
+#     if not os.path.exists(outdir):
+#         os.makedirs(outdir)
+#     if os.path.exists(filepath):
+#         print(f'Already downloaded')
+#     else:
+#         gdown.download(url, filepath, quiet=False)
     
-    train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
+#     if not os.path.exists(f'{outdir}/nursing'):
+#         with tarfile.open(filepath) as tar:
+#             tar.extractall(outdir)
+    
+#     train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
 
-    Xtr = pd.DataFrame()
-    ytr = pd.DataFrame()
-    Xde = pd.DataFrame()
-    yde = pd.DataFrame()
+#     Xtr = pd.DataFrame()
+#     ytr = pd.DataFrame()
+#     Xde = pd.DataFrame()
+#     yde = pd.DataFrame()
 
-    for i in tqdm(nurses):
-        Xi = pd.read_csv(f'{outdir}/nursing/{i}.csv')
-        yi = Xi.pop('label')
-        # should really window here to avoid overlap
+#     for i in tqdm(nurses):
+#         Xi = pd.read_csv(f'{outdir}/nursing/{i}.csv')
+#         yi = Xi.pop('label')
+#         # should really window here to avoid overlap
 
-        if i in train_idx:
-            Xtr = pd.concat([Xtr,Xi])
-            ytr = pd.concat([ytr,yi])
-        else:
-            Xde = pd.concat([Xde,Xi])
-            yde = pd.concat([yde,yi])
+#         if i in train_idx:
+#             Xtr = pd.concat([Xtr,Xi])
+#             ytr = pd.concat([ytr,yi])
+#         else:
+#             Xde = pd.concat([Xde,Xi])
+#             yde = pd.concat([yde,yi])
 
-    Xtr = torch.Tensor(Xtr.values)
-    ytr = torch.Tensor(ytr.values).squeeze().long()
-    Xde = torch.Tensor(Xde.values)
-    yde = torch.Tensor(yde.values).squeeze().long()
+#     Xtr = torch.Tensor(Xtr.values)
+#     ytr = torch.Tensor(ytr.values).squeeze().long()
+#     Xde = torch.Tensor(Xde.values)
+#     yde = torch.Tensor(yde.values).squeeze().long()
 
-    print(Xtr.shape, ytr.shape, Xde.shape, yde.shape)
-    if window:
-        tr = MultiClassDataset(pad_for_windowing(Xtr, winsize), ytr, winsize)
-        de = MultiClassDataset(pad_for_windowing(Xde, winsize), yde, winsize)
-    else:
-        tr = MultiClassDataset(Xtr[:len(Xtr) - len(Xtr) % winsize], ytr, winsize, window=False)
-        de = MultiClassDataset(Xde[:len(Xde) - len(Xde) % winsize], yde, winsize, window=False)
+#     print(Xtr.shape, ytr.shape, Xde.shape, yde.shape)
+#     if window:
+#         tr = MultiClassDataset(pad_for_windowing(Xtr, winsize), ytr, winsize)
+#         de = MultiClassDataset(pad_for_windowing(Xde, winsize), yde, winsize)
+#     else:
+#         tr = MultiClassDataset(Xtr[:len(Xtr) - len(Xtr) % winsize], ytr, winsize, window=False)
+#         de = MultiClassDataset(Xde[:len(Xde) - len(Xde) % winsize], yde, winsize, window=False)
 
-    trainloader = DataLoader(tr, batch_size=batch_size, shuffle=True, num_workers=2)
-    testloader = DataLoader(de, batch_size=batch_size, num_workers=2)
+#     trainloader = DataLoader(tr, batch_size=batch_size, shuffle=True, num_workers=2)
+#     testloader = DataLoader(de, batch_size=batch_size, num_workers=2)
 
-    return trainloader, testloader
+#     return trainloader, testloader
 
 def load_nursing(raw_dir, label_dir, winsize, n_sessions=None, session_idxs=None, test_size=0.25, batch_size=64, shuffle_test=False):
     not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 34, 70}
