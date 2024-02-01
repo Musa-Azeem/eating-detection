@@ -431,7 +431,6 @@ class RegNet(nn.Module):
         )
 
     def forward(self, x):
-        x = x.view(-1, self.in_channels, self.winsize)
         x = self.e(x)
         x = self.o(x)
         return x

@@ -46,7 +46,7 @@ class AccRawDatasetStrided(Dataset):
         if i >= self.__len__():
             raise IndexError("Index Out of Range")
 
-        return self.X[i*self.stride:i*self.stride+self.winsize].T.flatten()
+        return self.X[i*self.stride:i*self.stride+self.winsize].T
 
     def __len__(self):
         return (len(self.X) - self.winsize) // self.stride + 1
@@ -96,6 +96,7 @@ class MultiClassDataset(Dataset):
         return self.len
 
 DATA_DIR = f'{os.path.expanduser("~")}/.delta/nursing_pt'
+import math
 class WindowedDatasetWithStrideAndModeOfLabel(torch.utils.data.Dataset):
     def __init__(self, nurse, windowsize=1, stride=1):
         self.windowsize = windowsize
