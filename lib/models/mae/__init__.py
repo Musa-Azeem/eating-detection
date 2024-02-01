@@ -2,4 +2,4 @@ from .mae_alpha import MAEAlpha, MAEAlphaClassifier
 from .mae_beta import MAEBeta, MAEBetaClassifier
 from .mae_gamma import MAEGamma
 from .mae_delta import MAEDelta, MAEDeltaClassifier
-from .mae_regnet import RegNetMAE
+from .mae_regnet import RegNetMAE, RegNetClassifier

@@ -164,12 +164,12 @@ class RegNetMAE(nn.Module):
             nn.ReLU(),
             s
         )
-        trans_seq_len = s[-1][-1].seq_len
-        print(f'latent dims: {trans_seq_len}')
+        self.trans_seq_len = s[-1][-1].seq_len
+        print(f'latent dims: {self.trans_seq_len}')
         self.transformer_encoder = nn.Sequential(
             nn.Conv1d(w[-1], d_model, 1),
             Permute(0,2,1),
-            PositionalEncoding(d_model, seq_len=trans_seq_len),
+            PositionalEncoding(d_model, seq_len=self.trans_seq_len),
             nn.TransformerEncoder(
                 nn.TransformerEncoderLayer(d_model, nhead, 2048, 0.1, batch_first=True), 
                 num_layers=ntrans,
@@ -183,7 +183,7 @@ class RegNetMAE(nn.Module):
         for i in range(self.n_stage):
             rs = nn.Sequential()
             for j in range(d[-i-1]):
-                in_seq = rs[-1].seq_len if j>0 else ds[-1][-1].seq_len if i>0 else trans_seq_len
+                in_seq = rs[-1].seq_len if j>0 else ds[-1][-1].seq_len if i>0 else self.trans_seq_len
                 out_seq = in_seq if j < d[-i-1]-1 else s[-i-2][0].seq_len if i < self.n_stage-1 else stem_out_len
 
                 rs.add_module(f'd-stage-{len(d)-i-1}_block-{d[-i-1]-j-1}', XDecoderBlockMAE(
@@ -225,3 +225,79 @@ class RegNetMAE(nn.Module):
             chunked[i][mi] = torch.zeros_like(chunked[i][mi], device=x.device)
         x = torch.cat(chunked, dim=2)
         return x
+
+class RegNetClassifier(nn.Module):
+    def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, d_model=192, b=1, g=1, p_dropout=None, maskpct=0.75, ntrans=1, nhead=1, weights_file=None, freeze=False):
+        """
+            stem_out_c: out channels of stem before first stage
+            d: tuple of num blocks in each stage
+            w: tuple of num channels in each stage
+            can leave d_model, b, g, maskpct, ntrans, nhead as default if no weights file
+        """        
+        super().__init__()
+        self.winsize = winsize
+        self.in_channels = in_channels
+        self.stem_out_c = stem_out_c
+        self.n_stage = len(d)
+        if len(w) != len(d):
+            raise ValueError('d and w must have same length')
+        
+        self.d_str = '-'.join([str(di) for di in d])
+        self.w_str = '-'.join([str(wi) for wi in w])
+        self.g = g
+        self.b = b
+        self.p_dropout = p_dropout
+
+        self.autoencoder_params = dict(
+            winsize=winsize, 
+            in_channels=in_channels, 
+            stem_out_c=stem_out_c, 
+            d=d, 
+            w=w, 
+            d_model=d_model, 
+            b=b, 
+            g=g, 
+            p_dropout=p_dropout, 
+            maskpct=maskpct, 
+            ntrans=ntrans, 
+            nhead=nhead
+        )
+
+        self.weights_file = weights_file
+        self.freeze = freeze
+
+        s = nn.Sequential()
+        w = [stem_out_c] + list(w)
+
+        stem_pre_ln = math.floor(((winsize-1))/2+1)
+        stem_out_len = math.floor(((stem_pre_ln-3))/2+1)
+        
+        self.e, encoder_outdims = self.get_encoder()
+
+        self.o = nn.Sequential(
+            nn.AvgPool1d(kernel_size=encoder_outdims), # Nxdims[-1]x1
+            nn.Flatten(start_dim=1), # Nxdims[-1]
+            nn.Linear(in_features=w[-1], out_features=5)
+        )
+
+    def forward(self, x):
+        x = x.view(-1, self.in_channels, self.winsize)
+        x = self.e(x)
+        x = self.o(x)
+        return x
+    
+    def get_encoder(self):
+        autoencoder = RegNetMAE(**self.autoencoder_params)
+
+        if self.weights_file:
+            print("Model is loading pretrained encoder")
+            autoencoder.load_state_dict(torch.load(self.weights_file))
+        
+        encoder = autoencoder.e
+
+        if self.freeze:
+            print("Model is freezing encoder")
+            for p in encoder.parameters():
+                p.requires_grad = False
+        
+        return encoder, autoencoder.trans_seq_len
