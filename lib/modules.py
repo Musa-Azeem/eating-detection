@@ -415,15 +415,29 @@ def optimization_loop_multi_class(
         'Exercise':2,
         'Medication':3,
         'Smoking':4,
-    }
+    },
+    config = None,
+    continue_training = False
 ):
     if outdir:
         outdir = Path(outdir)
         model_outdir = outdir / 'model'
-        model_outdir.mkdir(parents=True)
         info_file = outdir / 'info.json'
         stats_dir = outdir / 'stats'
-        stats_dir.mkdir()
+
+        if not continue_training:
+            model_outdir.mkdir(parents=True)
+            stats_dir.mkdir()
+            with info_file.open('w') as f:
+                json.dump(info, f, indent=4)
+            with (outdir / 'config.json').open('w') as f:
+                json.dump(config, f, indent=4)
+        if continue_training:
+            model.load_state_dict(torch.load(outdir / 'best_model.pt'))
+            train_loss = torch.load(stats_dir / 'train_loss.pt')
+            dev_loss = torch.load(stats_dir / 'dev_loss.pt')
+            info = json.load(info_file.open())
+            s = info['Latest Epoch'] + 1
     
     if writer:
         writer = SummaryWriter(writer)
@@ -437,7 +451,7 @@ def optimization_loop_multi_class(
     lowest_loss = float('inf')
     early_stop_counter = 0
 
-    pbar = tqdm(range(epochs))
+    pbar = tqdm(range(s, s+epochs))
     for epoch in pbar:
         lower = False
 

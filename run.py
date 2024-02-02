@@ -70,7 +70,7 @@ CONFIG = {
     'BATCH_SIZE':128,
     'LEARNING_RATE':3e-4,
     'TEST_SIZE':0.2,
-    'DEVICE':'cuda:1',
+    'DEVICE':'cuda:0',
     'DEPTHI': [1],
     'WIDTHI': [64],
     'NTL': 2,

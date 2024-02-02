@@ -210,7 +210,7 @@ class RegNetMAE(nn.Module):
         x = self.mask(x)
         x = self.transformer_encoder(x)
         x = self.dec(x)
-        return x.flatten(start_dim=1)
+        return x
     
     def mask(self, x):
         # Mask: split X into chunks of mask_len size and randomly set maskpct% 
