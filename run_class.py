@@ -6,18 +6,22 @@ from lib.config import RAW_DIR
 import torch
 from torch import nn
 import json
+import numpy as np
 
 def train_mae_9_class(CONFIG, weights_file, freeze):
+    CONFIG['FROZEN'] = freeze
+    CONFIG['PRETRAINED'] = weights_file is not None
+
     p_dropout = 0.1
     model = RegNetClassifier(
         winsize=CONFIG['WINDOW_SIZE'], 
         in_channels=3, 
-        stem_out_c=4, 
+        stem_out_c=CONFIG['WIDTHI'][0], 
         d=CONFIG['DEPTHI'], 
         w=CONFIG['WIDTHI'], 
         d_model=CONFIG['DMODEL'], 
         b=1, 
-        g=2, 
+        g=1, 
         p_dropout=p_dropout, 
         ntrans=CONFIG['NTL'], 
         nhead=2,
@@ -51,7 +55,7 @@ def train_mae_9_class(CONFIG, weights_file, freeze):
         f'_nth{model.autoencoder_params["nhead"]}'
         f'_dmodel{model.autoencoder_params["d_model"]}'
         f'_maskpct{model.autoencoder_params["maskpct"]}'
-        f'_{pretrained}_{frozen}'
+        f'_{pretrained}_{frozen}4'
     )
     optimization_loop_multi_class(
         model,
@@ -59,26 +63,13 @@ def train_mae_9_class(CONFIG, weights_file, freeze):
         nursing_testloader,
         criterion,
         optimizer,
-        epochs=10000,
-        patience=2000,
+        epochs=2000,
+        patience=500,
         device=CONFIG['DEVICE'],
-        outdir=f'dev/9_regnet-mae/classifiers/{outdir}',
-        writer=f'runs/9_regnet-mae-classifiers/{outdir}'
+        outdir=f'dev/classifiers/{outdir}',
+        writer=f'runs/classifiers/{outdir}',
+        config=CONFIG
     )
-
-# CONFIG = {
-#     'WINDOW_SIZE':3901,
-#     'WINDOW_STRIDE':3901,
-#     'BATCH_SIZE':128,
-#     'LEARNING_RATE':3e-4,
-#     'TEST_SIZE':0.2,
-#     'DEVICE':'cuda:1',
-#     'DEPTHI': [1],
-#     'WIDTHI': [64],
-#     'NTL': 2,
-#     'DMODEL': 256,
-#     'MASKPCT': 0.25
-# }
 
 def try_wrapper(CONFIG, weights_file, freeze):
     try:
@@ -98,21 +89,35 @@ def try_wrapper(CONFIG, weights_file, freeze):
                     raise e
                 print(e)
 
-if __name__ == '__main__':
-    # best ones:
-    # for autoencoder_dir in [
-    #     Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev/RegNetMAE_lossfn-MSELoss_win3901_stride3901_so4_d1_w64_b1_g2_p0.1_ntl2_nth2_dmodel64_maskpct0.0'),
-    #     Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev/RegNetMAE_lossfn-MSELoss_win3901_stride3901_so4_d1_w64_b1_g2_p0.1_ntl2_nth2_dmodel64_maskpct0.25'),
-    #     Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev/RegNetMAE_lossfn-MSELoss_win3901_stride3901_so4_d1_w64_b1_g2_p0.1_ntl2_nth2_dmodel128_maskpct0.5'),
-    #     Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev/RegNetMAE_lossfn-MSELoss_win3901_stride3901_so4_d1_w64_b1_g2_p0.1_ntl2_nth2_dmodel64_maskpct0.75')
-    # ]:
 
+def train_pretrained_models():
     # all:
     for autoencoder_dir in Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev').iterdir():
         CONFIG = json.load((autoencoder_dir / 'config.json').open())
-        CONFIG['DEVICE'] = 'cuda:0'
+        CONFIG['DEVICE'] = 'cuda:1'
         weights_file = autoencoder_dir / 'best_model.pt'
 
         try_wrapper(CONFIG, weights_file, True)
         try_wrapper(CONFIG, weights_file, False)
         try_wrapper(CONFIG, None, False)
+
+
+def train_random_models():
+    CONFIG = {
+        'WINDOW_SIZE':3901,
+        'WINDOW_STRIDE':3901,
+        'BATCH_SIZE':256,
+        'LEARNING_RATE':3e-4,
+        'TEST_SIZE':0.2,
+        'DEVICE':'cuda:1',
+        'DEPTHI': [2],
+        'WIDTHI': [64],
+        'NTL': 1,
+        'DMODEL': 32,
+        'MASKPCT': 0.0
+    }
+    try_wrapper(CONFIG, None, False)
+
+
+if __name__ == '__main__':
+    train_random_models()

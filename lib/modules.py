@@ -424,6 +424,15 @@ def optimization_loop_multi_class(
         model_outdir = outdir / 'model'
         info_file = outdir / 'info.json'
         stats_dir = outdir / 'stats'
+        info = {
+            'best_model': -1, 
+            'loss': -1, 
+            'latest_epoch': 0,
+            'precision': [],
+            'recall': [],
+            'f1': []
+        }
+        s = 0
 
         if not continue_training:
             model_outdir.mkdir(parents=True)
@@ -448,12 +457,12 @@ def optimization_loop_multi_class(
     recall = []
     f1 = np.zeros((0, len(class_map)))
 
-    lowest_loss = float('inf')
+    highest_f1 = float('-inf')
     early_stop_counter = 0
 
     pbar = tqdm(range(s, s+epochs))
     for epoch in pbar:
-        lower = False
+        higher = False
 
         # Train Loop
         train_lossi = inner_train_loop(model, trainloader, criterion, optimizer, device)
@@ -466,11 +475,12 @@ def optimization_loop_multi_class(
         preci, recalli, f1i, _ = precision_recall_fscore_support(
             y_true, y_pred, zero_division=0.0, pos_label=1, average=None
         )
+        macro_f1i = f1i.mean()
         prec.append(preci)
         recall.append(recalli)
         f1 = np.concatenate([f1, f1i.reshape(1,-1)], axis=0)
 
-        pbar.set_description(f'{label}: Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
+        pbar.set_description(f'{label}: Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}, Dev F1: {macro_f1i:.5}')
 
         # Plot loss
         plt.plot(train_loss)
@@ -479,17 +489,17 @@ def optimization_loop_multi_class(
         plt.savefig('running_loss.jpg')
 
         # Early Stopping
-        if (lowest_loss - dev_loss[-1]) > min_delta:
+        if (macro_f1i - highest_f1) > min_delta:
             # Sig diff, reset counter
             early_stop_counter = 0
         else:
             # Not a sig diff, increment counter
             early_stop_counter += 1
 
-        # Save lowest loss
-        if dev_loss[-1] < lowest_loss:
-            lower = True
-            lowest_loss = dev_loss[-1]
+        # Save highest f1
+        if macro_f1i > highest_f1:
+            higher = True
+            highest_f1 = macro_f1i
         
         if outdir:
             torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
@@ -500,17 +510,19 @@ def optimization_loop_multi_class(
             torch.save(f1, stats_dir / 'f1.pt')
             plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'), f1=f1)
 
-            # Save model with lowest loss
-            if lower:
-                torch.save(model.state_dict(), outdir / f'best_model.pt')
-                with info_file.open('w') as f:
-                    json.dump({
-                        "best_model": epoch,
-                        "loss": lowest_loss,
-                        "precision": preci.tolist(),
-                        "recall": recalli.tolist(),
-                        "f1": f1i.tolist()
-                    }, f, indent=4)
+            # Save model with highest f1
+            if higher:
+                if epoch % 10 == 0:
+                    torch.save(model.state_dict(), outdir / f'best_model.pt')
+                info['best_model'] = epoch
+                info['loss'] = dev_loss[-1]
+                info['precision'] = preci.tolist()
+                info['recall'] = recalli.tolist()
+                info['f1'] = f1i.tolist()
+                
+            info['latest_epoch'] = epoch
+            with info_file.open('w') as f:
+                json.dump(info, f, indent=4)
         plt.close()
 
         if writer:

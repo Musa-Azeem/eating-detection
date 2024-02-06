@@ -11,7 +11,7 @@ def train_mae_9(CONFIG):
     model = RegNetMAE(
         winsize=CONFIG['WINDOW_SIZE'], 
         in_channels=3, 
-        stem_out_c=4, 
+        stem_out_c=CONFIG['WIDTHI'][0], 
         d=CONFIG['DEPTHI'], 
         w=CONFIG['WIDTHI'], 
         d_model=CONFIG['DMODEL'], 
@@ -55,13 +55,14 @@ def train_mae_9(CONFIG):
         testloader,
         criterion,
         optimizer,
-        epochs=2500,
+        epochs=3500,
         patience=500,
         config=CONFIG,
         continue_training=False,
         device=CONFIG['DEVICE'],
-        outdir=f'dev/9_regnet-mae/dev/{outdir}',
-        writer=f'runs/9_regnet-mae/{outdir}'
+        outdir=f'dev/9_regnet-mae/dev-2-5-24/{outdir}',
+        writer=f'runs/9_regnet-mae-2-5-24/{outdir}',
+        label=f'MAE {CONFIG["MASKPCT"]}%-{CONFIG["DMODEL"]}: '
     )
 
 CONFIG = {
@@ -71,15 +72,15 @@ CONFIG = {
     'LEARNING_RATE':3e-4,
     'TEST_SIZE':0.2,
     'DEVICE':'cuda:0',
-    'DEPTHI': [1],
+    'DEPTHI': [2],
     'WIDTHI': [64],
     'NTL': 2,
     'DMODEL': 256,
     'MASKPCT': 0.25
 }
 if __name__ == '__main__':
-    for mask_pcti in [0.0, 0.25, 0.5, 0.75]:
-        for dmodeli in [32, 512]:
+    for mask_pcti in [0.0, 0.15, 0.25, 0.5, 0.75]:
+        for dmodeli in [32, 64, 128]:
             CONFIG['MASKPCT'] = mask_pcti
             CONFIG['DMODEL'] = dmodeli
             try:
