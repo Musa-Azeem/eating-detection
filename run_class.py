@@ -55,7 +55,7 @@ def train_mae_9_class(CONFIG, weights_file, freeze):
         f'_nth{model.autoencoder_params["nhead"]}'
         f'_dmodel{model.autoencoder_params["d_model"]}'
         f'_maskpct{model.autoencoder_params["maskpct"]}'
-        f'_{pretrained}_{frozen}4'
+        f'_{pretrained}_{frozen}'
     )
     optimization_loop_multi_class(
         model,
@@ -63,11 +63,11 @@ def train_mae_9_class(CONFIG, weights_file, freeze):
         nursing_testloader,
         criterion,
         optimizer,
-        epochs=2000,
-        patience=500,
+        epochs=20000,
+        patience=1500,
         device=CONFIG['DEVICE'],
-        outdir=f'dev/classifiers/{outdir}',
-        writer=f'runs/classifiers/{outdir}',
+        outdir=f'dev/9_regnet-mae/classifiers-2-5-24/{outdir}',
+        writer=f'runs/9_regnet-mae-classifiers-2-5-24/{outdir}',
         config=CONFIG
     )
 
@@ -92,7 +92,9 @@ def try_wrapper(CONFIG, weights_file, freeze):
 
 def train_pretrained_models():
     # all:
-    for autoencoder_dir in Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev').iterdir():
+    for autoencoder_dir in Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev-2-5-24').iterdir():
+        if not 'maskpct0.15' in autoencoder_dir.name:
+            continue
         CONFIG = json.load((autoencoder_dir / 'config.json').open())
         CONFIG['DEVICE'] = 'cuda:1'
         weights_file = autoencoder_dir / 'best_model.pt'
@@ -120,4 +122,4 @@ def train_random_models():
 
 
 if __name__ == '__main__':
-    train_random_models()
+    train_pretrained_models()

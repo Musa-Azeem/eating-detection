@@ -23,11 +23,13 @@ def load_nursing_5_class(nurses, winsize, test_size, batch_size, stride=1):
 
     if stride == 'partition':
         stride = winsize
-    if test_size == 0:
-        train_idx = nurses
-        dev_idx = []
-    else:
-        train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
+    
+    if test_size == 1:
+        dev_idx = nurses
+        devloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in dev_idx]),batch_size=batch_size,shuffle=False)
+        return None, devloader
+
+    train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
     trainloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in train_idx]),batch_size=batch_size,shuffle=True)
     devloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in dev_idx]),batch_size=batch_size,shuffle=False)
     

@@ -261,9 +261,9 @@ class RegNetMAE(nn.Module):
     def mask(self, x):
         # Mask: split X into chunks of mask_len size and randomly set maskpct% 
         # of chunks (all channels) to values from a normal distribution
-        mask_len = 10
-        n_chunks = x.shape[2] // mask_len
-        chunked = list(torch.split(x, n_chunks, dim=2))
+        n_chunks = 10
+        chunk_len = x.shape[2] // n_chunks
+        chunked = list(torch.split(x, chunk_len, dim=2))
         mask = torch.rand(len(chunked), x.shape[0]) < self.maskpct # maskpct% of values are True
         for i,mi in enumerate(mask):
             chunked[i] = chunked[i].clone()
