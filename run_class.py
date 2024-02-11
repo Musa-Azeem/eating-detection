@@ -66,8 +66,8 @@ def train_mae_9_class(CONFIG, weights_file, freeze):
         epochs=20000,
         patience=1500,
         device=CONFIG['DEVICE'],
-        outdir=f'dev/9_regnet-mae/classifiers-2-5-24/{outdir}',
-        writer=f'runs/9_regnet-mae-classifiers-2-5-24/{outdir}',
+        outdir=f'dev/stride_search/{outdir}',
+        writer=f'runs/stride_search/{outdir}',
         config=CONFIG
     )
 
@@ -93,10 +93,10 @@ def try_wrapper(CONFIG, weights_file, freeze):
 def train_pretrained_models():
     # all:
     for autoencoder_dir in Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev-2-5-24').iterdir():
-        if not 'maskpct0.15' in autoencoder_dir.name:
+        if 'maskpct0.0' in autoencoder_dir.name or 'maskpct0.15' in autoencoder_dir.name:
             continue
         CONFIG = json.load((autoencoder_dir / 'config.json').open())
-        CONFIG['DEVICE'] = 'cuda:1'
+        CONFIG['DEVICE'] = 'cuda:0'
         weights_file = autoencoder_dir / 'best_model.pt'
 
         try_wrapper(CONFIG, weights_file, True)
@@ -120,6 +120,24 @@ def train_random_models():
     }
     try_wrapper(CONFIG, None, False)
 
+def stride_search():
+    CONFIG = {
+        'WINDOW_SIZE':3901,
+        'WINDOW_STRIDE':3901,
+        'BATCH_SIZE':256,
+        'LEARNING_RATE':3e-4,
+        'TEST_SIZE':0.2,
+        'DEVICE':'cuda:0',
+        'DEPTHI': [2],
+        'WIDTHI': [64],
+        'NTL': 1,
+        'DMODEL': 32,
+        'MASKPCT': 0.0
+    }
+    for stride in [3901, 1950, 975, 487, 243, 121, 60, 1]:
+        CONFIG['WINDOW_STRIDE'] = stride
+        try_wrapper(CONFIG, None, False)
 
 if __name__ == '__main__':
-    train_pretrained_models()
+    # train_pretrained_models()
+    stride_search()
