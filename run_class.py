@@ -135,9 +135,10 @@ def stride_search():
         'DMODEL': 32,
         'MASKPCT': 0.0
     }
-    for window_size in [3901, 1001, 501, 101]:
+    # for window_size in [3901, 1001]:
+    for window_size in [501, 101]:
         CONFIG['WINDOW_SIZE'] = window_size
-        for stride in [3901, 1950, 975, 487, 243, 121, 60, 1]:
+        for stride in [window_size, window_size//2, window_size//4, window_size//8, window_size//16, window_size//32, window_size//64, 1]:
             CONFIG['WINDOW_STRIDE'] = stride
             for i in range(3):
                 try_wrapper(CONFIG, None, False, 1000, 200, label=f'-{i}')
