@@ -16,7 +16,7 @@ def train_mae_9(CONFIG):
         w=CONFIG['WIDTHI'], 
         d_model=CONFIG['DMODEL'], 
         b=1, 
-        g=2, 
+        g=1, 
         p_dropout=p_dropout, 
         ntrans=CONFIG['NTL'], 
         nhead=2,

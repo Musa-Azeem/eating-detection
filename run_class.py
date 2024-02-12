@@ -8,7 +8,7 @@ from torch import nn
 import json
 import numpy as np
 
-def train_mae_9_class(CONFIG, weights_file, freeze):
+def train_mae_9_class(CONFIG, weights_file, freeze, epochs=1000, patience=500, label=''):
     CONFIG['FROZEN'] = freeze
     CONFIG['PRETRAINED'] = weights_file is not None
 
@@ -55,7 +55,7 @@ def train_mae_9_class(CONFIG, weights_file, freeze):
         f'_nth{model.autoencoder_params["nhead"]}'
         f'_dmodel{model.autoencoder_params["d_model"]}'
         f'_maskpct{model.autoencoder_params["maskpct"]}'
-        f'_{pretrained}_{frozen}'
+        f'_{pretrained}_{frozen}{label}'
     )
     optimization_loop_multi_class(
         model,
@@ -63,26 +63,29 @@ def train_mae_9_class(CONFIG, weights_file, freeze):
         nursing_testloader,
         criterion,
         optimizer,
-        epochs=20000,
-        patience=1500,
+        epochs=epochs,
+        patience=patience,
         device=CONFIG['DEVICE'],
         outdir=f'dev/stride_search/{outdir}',
         writer=f'runs/stride_search/{outdir}',
         config=CONFIG
     )
 
-def try_wrapper(CONFIG, weights_file, freeze):
+def try_wrapper(*args, **kwargs):
     try:
-        train_mae_9_class(CONFIG, weights_file, freeze)
+        train_mae_9_class(*args, **kwargs)
     except RuntimeError as e:
         if not 'CUDA out of memory' in str(e):
             raise e
         print(e)
-        CONFIG = CONFIG.copy()
+        CONFIG = (args[0] if len(args) > 0 else kwargs['CONFIG']).copy()
+        # CONFIG = CONFIG.copy()
         for bi in [64,32]:
             CONFIG['BATCH_SIZE'] = bi
+            args = list(args)
+            args[0] = CONFIG
             try:
-                train_mae_9_class(CONFIG, weights_file, freeze)
+                train_mae_9_class(*args, **kwargs)
                 break
             except RuntimeError as e:
                 if not 'CUDA out of memory' in str(e):
@@ -93,15 +96,13 @@ def try_wrapper(CONFIG, weights_file, freeze):
 def train_pretrained_models():
     # all:
     for autoencoder_dir in Path('/home/musa/eating/eating-detection/dev/9_regnet-mae/dev-2-5-24').iterdir():
-        if 'maskpct0.0' in autoencoder_dir.name or 'maskpct0.15' in autoencoder_dir.name:
-            continue
         CONFIG = json.load((autoencoder_dir / 'config.json').open())
         CONFIG['DEVICE'] = 'cuda:0'
         weights_file = autoencoder_dir / 'best_model.pt'
 
-        try_wrapper(CONFIG, weights_file, True)
-        try_wrapper(CONFIG, weights_file, False)
-        try_wrapper(CONFIG, None, False)
+        try_wrapper(CONFIG, weights_file, True, 20000, 1000)
+        try_wrapper(CONFIG, weights_file, False, 20000, 1000)
+        try_wrapper(CONFIG, None, False, 20000, 1000)
 
 
 def train_random_models():
@@ -118,7 +119,7 @@ def train_random_models():
         'DMODEL': 32,
         'MASKPCT': 0.0
     }
-    try_wrapper(CONFIG, None, False)
+    try_wrapper(CONFIG, None, False, 1000, 200)
 
 def stride_search():
     CONFIG = {
@@ -127,16 +128,19 @@ def stride_search():
         'BATCH_SIZE':256,
         'LEARNING_RATE':3e-4,
         'TEST_SIZE':0.2,
-        'DEVICE':'cuda:0',
+        'DEVICE':'cuda:1',
         'DEPTHI': [2],
         'WIDTHI': [64],
         'NTL': 1,
         'DMODEL': 32,
         'MASKPCT': 0.0
     }
-    for stride in [3901, 1950, 975, 487, 243, 121, 60, 1]:
-        CONFIG['WINDOW_STRIDE'] = stride
-        try_wrapper(CONFIG, None, False)
+    for window_size in [3901, 1001, 501, 101]:
+        CONFIG['WINDOW_SIZE'] = window_size
+        for stride in [3901, 1950, 975, 487, 243, 121, 60, 1]:
+            CONFIG['WINDOW_STRIDE'] = stride
+            for i in range(3):
+                try_wrapper(CONFIG, None, False, 1000, 200, label=f'-{i}')
 
 if __name__ == '__main__':
     # train_pretrained_models()
