@@ -156,6 +156,62 @@ def load_nursing(raw_dir, label_dir, winsize, n_sessions=None, session_idxs=None
     return trainloader, testloader
 
 def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, test_size=0.25, batch_size=64, shuffle_test=False, stride=1):
+    raw_dir = Path(raw_dir)
+    if n_hours and n_hours < chunk_len_hrs*2:
+        raise ValueError(f"n_hours must be at least chunk_len_hrs*2 ({chunk_len_hrs*2})")
+
+    n_samples = int(n_hours * 60 * 60 * 100) if n_hours else None   # number of samples at 100 Hz to get n_hours hours
+    chunk_len = int(chunk_len_hrs * 60 * 60 * 100)                  # number of samples at 100 Hz to get chunk_len_hrs hours
+
+    # Use all available sessions if none provided
+    if sessions:
+        sessions = [raw_dir / Path(session) for session in sessions]
+    else:
+        print("Using all available sessions")
+        sessions = list(raw_dir.iterdir())
+    print("Using Directories: "+str([session.name for session in sessions]))
+
+    # Read all sessions from pt files
+    accs = []
+    for session_dir in sessions:
+        accs.append(pad_for_windowing(torch.load(session_dir), winsize))
+
+    # Concatenate all sessions and split into chunks of chunk_len samples
+    all_acc = torch.cat(accs, axis=0)
+    all_acc = all_acc[:len(all_acc) - len(all_acc) % chunk_len] # cut off very last part
+    all_acc = all_acc.view(-1, chunk_len, 3)
+    print(f"Created {len(all_acc)} chunks of length {chunk_len} samples each")
+
+    if n_samples:
+        # Randomly Select n_samples worth of chunks
+        n_chunks = n_samples // chunk_len # if chunk_len_hrs is 5: 5 hours = 1 chunk, 10 hours = 2 chunks, etc.
+        if n_chunks > len(all_acc):
+            raise ValueError(f"n_hours ({n_hours}) is greater than the total number of hours ({len(all_acc)*chunk_len_hrs})")
+        random.seed(10)
+        idxs = random.sample(list(range(len(all_acc))), n_chunks)
+        all_acc = all_acc[idxs]
+        print(f"Randomly selected {n_chunks} chunks")
+
+    # Split into train and test
+    def proc(x):
+        x = pad_for_windowing(x, winsize) # pad second dimension
+        x = x.flatten(end_dim=1)
+        return x
+    np.random.seed(10)
+    acctr, accte = map(proc, train_test_split(all_acc, test_size=test_size))
+
+    print(f"Total train length: {timedelta(seconds=len(acctr) / 100)} ({len(acctr)} Samples)")
+    print(f"Total test length: {timedelta(seconds=len(accte) / 100)} ({len(accte)} Samples)")
+
+    Xtr = AccRawDatasetStrided(acctr, winsize, stride=stride)
+    Xte = AccRawDatasetStrided(accte, winsize, stride=stride)
+
+    trainloader = DataLoader(Xtr, batch_size=batch_size, shuffle=True, num_workers=4)
+    testloader = DataLoader(Xte, batch_size=batch_size, shuffle=shuffle_test, num_workers=4)
+
+    return trainloader, testloader
+
+def load_raw_nopt(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, test_size=0.25, batch_size=64, shuffle_test=False, stride=1):
     """
         1. Get list of N raw recording directories (from delta app, no labels)
         2. Read all raw data into N DataFrames of lengths l. Reset their timestamp to be seconds from the start. Print the length of each session

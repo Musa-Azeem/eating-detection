@@ -80,6 +80,14 @@ def read_delta_session(raw_dir, session_dir):
     acceleration.timestamp = ((acceleration.timestamp - acceleration.timestamp[0])*1e-9)+acceleration_start_time_seconds # get timestamp in seconds
     return acceleration
 
+def delta_to_pt(raw_dir, pt_dir):
+    raw_dir = Path(raw_dir)
+    pt_dir = Path(pt_dir)
+    for session_dir in raw_dir.iterdir():
+        acc = read_delta_session(raw_dir, session_dir.name)
+        print(f'Index: {len(acc)-1}, Date: {session_dir.name}, nSamples: {len(acc)}, Time Elapsed: {timedelta(seconds=acc.timestamp.iloc[-1] - acc.timestamp.iloc[0])}, Time Recorded: {timedelta(seconds=len(acc) / 100)}')
+        torch.save(torch.Tensor(acc[['x_acc','y_acc','z_acc']].values), pt_dir / (session_dir.name + '.pt'))
+
 # =============================================================================
 # =========================== Tensor Processing ===============================
 # =============================================================================
