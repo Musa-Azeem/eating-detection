@@ -345,3 +345,116 @@ class RegNetClassifier(nn.Module):
                 p.requires_grad = False
         
         return encoder, autoencoder.trans_seq_len
+    
+
+
+
+
+class RegNetMAEv2(nn.Module):
+    def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, d_model, b=1, g=1, p_dropout=None, maskpct=0.75, ntrans=1, nhead=1):
+        super().__init__()
+        if len(w) != len(d):
+            raise ValueError('d and w must have same length')
+        
+        self.winsize = winsize
+        self.in_channels = in_channels
+        self.stem_out_c = stem_out_c
+        self.n_stage = len(d)
+        self.d_str = '-'.join([str(di) for di in d])
+        self.w_str = '-'.join([str(wi) for wi in w])
+        self.p_dropout = p_dropout
+        self.b = b
+        self.g = g
+        self.ntrans = ntrans
+        self.nhead = nhead
+
+        self.d_model = d_model
+        self.maskpct = maskpct
+        
+        w = [stem_out_c] + list(w)
+        stem_pre_ln = math.floor(((winsize-1))/2+1)
+        stem_out_len = math.floor(((stem_pre_ln-3))/2+1)
+
+        s = nn.Sequential()
+        for i in range(self.n_stage):
+            rs = nn.Sequential()
+            for j in range(d[i]):
+                rs.add_module(f'e_stage-{i}_block-{j}', XBlockMAE(
+                    w[i] if j==0 else w[i+1], 
+                    w[i+1], 
+                    kernel_size=3, 
+                    seq_len=rs[-1].seq_len if j>0 else s[-1][-1].seq_len if i>0 else stem_out_len, 
+                    b=b, 
+                    g=g, 
+                    relu=True,
+                    p_dropout=p_dropout
+                ))
+            s.add_module(f'e_stage-{i}', rs)
+
+        self.e = nn.Sequential(
+            nn.Conv1d(in_channels, stem_out_c, kernel_size=3, stride=2, padding=1),
+            nn.LayerNorm((stem_pre_ln)),
+            nn.MaxPool1d(kernel_size=2,stride=2),
+            nn.ReLU(),
+            s
+        )
+        self.trans_seq_len = s[-1][-1].seq_len
+        print(f'latent dims: {self.trans_seq_len}')
+        self.transformer_encoder = nn.Sequential(
+            nn.Conv1d(w[-1], d_model, 1),
+            Permute(0,2,1),
+            PositionalEncoding(d_model, seq_len=self.trans_seq_len),
+            nn.TransformerEncoder(
+                nn.TransformerEncoderLayer(d_model, nhead, 2048, 0.1, batch_first=True), 
+                num_layers=ntrans,
+                enable_nested_tensor=False
+            ),
+            Permute(0,2,1),
+            nn.Conv1d(d_model, w[-1], 1),
+        )
+
+        ds = nn.Sequential()
+        for i in range(self.n_stage):
+            rs = nn.Sequential()
+            for j in range(d[-i-1]):
+                in_seq = rs[-1].seq_len if j>0 else ds[-1][-1].seq_len if i>0 else self.trans_seq_len
+                out_seq = in_seq if j < d[-i-1]-1 else s[-i-2][0].seq_len if i < self.n_stage-1 else stem_out_len
+
+                rs.add_module(f'd-stage-{len(d)-i-1}_block-{d[-i-1]-j-1}', XDecoderBlockMAE(
+                    w[-i-1], 
+                    w[-i-2] if j == d[-i-1]-1 else w[-i-1], 
+                    kernel_size=3, 
+                    seq_len=in_seq,
+                    out_seq=out_seq,
+                    b=1, 
+                    g=1, 
+                    relu=True,
+                    p_dropout=0.01
+                ))
+            ds.add_module(f'd_stage-{len(d)-i-1}', rs)
+
+        self.dec = nn.Sequential(
+            ds,
+            nn.Upsample(size=stem_pre_ln, mode='linear'),
+            nn.ConvTranspose1d(w[0], in_channels, kernel_size=3, stride=2, padding=1, output_padding=get_out_padding(stem_out_len, winsize)),
+        )
+
+    def forward(self, x):
+        x = self.e(x)
+        x = self.mask(x)
+        x = self.transformer_encoder(x)
+        x = self.dec(x)
+        return x
+    
+    def mask(self, x):
+        # Mask: split X into chunks of mask_len size and randomly set maskpct% 
+        # of chunks (all channels) to values from a normal distribution
+        n_chunks = 10
+        chunk_len = x.shape[2] // n_chunks
+        chunked = list(torch.split(x, chunk_len, dim=2))
+        mask = torch.rand(len(chunked), x.shape[0]) < self.maskpct # maskpct% of values are True
+        for i,mi in enumerate(mask):
+            chunked[i] = chunked[i].clone()
+            chunked[i][mi] = torch.zeros_like(chunked[i][mi], device=x.device)
+        x = torch.cat(chunked, dim=2)
+        return x
