@@ -140,7 +140,8 @@ def stride_search():
     # for window_size in [1001]:
     # for window_size in [1001]:
         CONFIG['WINDOW_SIZE'] = window_size
-        for stride in [window_size, window_size//2, window_size//4, window_size//8, window_size//16, window_size//32, window_size//64, 1]:
+        # for stride in [window_size, window_size//2, window_size//4, window_size//8, window_size//16, window_size//32, window_size//64, 1]:
+        for stride in [1]:
             CONFIG['WINDOW_STRIDE'] = stride
             for i in range(3):
                 try_wrapper(CONFIG, None, False, 400, 10, label=f'-{i}')
