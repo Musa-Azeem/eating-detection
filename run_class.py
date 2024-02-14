@@ -125,7 +125,7 @@ def stride_search():
     CONFIG = {
         'WINDOW_SIZE':3901,
         'WINDOW_STRIDE':3901,
-        'BATCH_SIZE':256,
+        'BATCH_SIZE':128,
         'LEARNING_RATE':3e-4,
         'TEST_SIZE':0.2,
         'DEVICE':'cuda:1',
