@@ -7,8 +7,30 @@ import torch
 from torch import nn
 import json
 import numpy as np
+import sys
+import os
 
-def train_mae_9_class(CONFIG, weights_file, freeze, epochs=1000, patience=500, label=''):
+def sample_regnet():
+    initial_width = np.round(int(np.clip(np.exp(np.random.uniform(np.log(8),np.log(64))),0,64)))
+    slope = np.round(int(np.clip(np.exp(np.random.uniform(np.log(8),np.log(64))),0,64)))
+    network_depth = int(np.clip(np.exp(np.random.uniform(np.log(1),np.log(20)+1)),0,20))
+    quantized_param = np.random.uniform(2,3)
+    # We need to derive block width and number of blocks from initial parameters.
+    parameterized_width = initial_width + slope * np.arange(network_depth)  # From equation 2
+    parameterized_block = np.log(parameterized_width / initial_width) / np.log(quantized_param)  # From equation 3
+
+    parameterized_block = np.round(parameterized_block)
+    quantized_width = initial_width * np.power(quantized_param, parameterized_block)
+    # We need to convert quantized_width to make sure that it is divisible by 8
+    quantized_width = 8 * np.round(quantized_width / 8)
+
+    w, d = np.unique(quantized_width.astype(int), return_counts=True)
+    if len(d) != 4:
+        return sample_regnet()
+    else:
+        return [int(di) for di in d],[int(wi) for wi in w],[wi for wi,di in zip(w,d) for i in range(di)]
+
+def train_mae_9_class(CONFIG, weights_file, freeze, epochs=1000, patience=500, project_dir='', label='', outdirlabel=''):
     CONFIG['FROZEN'] = freeze
     CONFIG['PRETRAINED'] = weights_file is not None
 
@@ -55,7 +77,7 @@ def train_mae_9_class(CONFIG, weights_file, freeze, epochs=1000, patience=500, l
         f'_nth{model.autoencoder_params["nhead"]}'
         f'_dmodel{model.autoencoder_params["d_model"]}'
         f'_maskpct{model.autoencoder_params["maskpct"]}'
-        f'_{pretrained}_{frozen}{label}'
+        f'_{pretrained}_{frozen}{outdirlabel}'
     )
     optimization_loop_multi_class(
         model,
@@ -66,9 +88,10 @@ def train_mae_9_class(CONFIG, weights_file, freeze, epochs=1000, patience=500, l
         epochs=epochs,
         patience=patience,
         device=CONFIG['DEVICE'],
-        outdir=f'dev/stride_search/{outdir}',
-        writer=f'runs/stride_search/{outdir}',
-        config=CONFIG
+        outdir=f'dev/{project_dir}/{outdir}',
+        writer=f'runs/{project_dir}/{outdir}',
+        config=CONFIG,
+        label=label
     )
 
 def try_wrapper(*args, **kwargs):
@@ -124,28 +147,50 @@ def train_random_models():
 def stride_search():
     CONFIG = {
         'WINDOW_SIZE':3901,
-        'WINDOW_STRIDE':3901,
+        'WINDOW_STRIDE':0,
         'BATCH_SIZE':128,
         'LEARNING_RATE':3e-4,
         'TEST_SIZE':0.2,
         'DEVICE':'cuda:1',
-        'DEPTHI': [2],
-        'WIDTHI': [64],
+        'DEPTHI': [],
+        'WIDTHI': [],
         'NTL': 1,
-        'DMODEL': 32,
+        'DMODEL': 2,
         'MASKPCT': 0.0
     }
-    # for window_size in [3901, 1001]:
-    for window_size in [501, 101]:
-    # for window_size in [1001]:
-    # for window_size in [1001]:
-        CONFIG['WINDOW_SIZE'] = window_size
-        # for stride in [window_size, window_size//2, window_size//4, window_size//8, window_size//16, window_size//32, window_size//64, 1]:
-        for stride in [1]:
-            CONFIG['WINDOW_STRIDE'] = stride
-            for i in range(3):
-                try_wrapper(CONFIG, None, False, 400, 10, label=f'-{i}')
+    winsizes = [101, 501, 1001, 2001, 3001, 3901]
+    stride_pcnts = [1, 0.75, 0.5, 0.25, 0.125, 0.0625, 0.03125, 0.015625, 0.0078125]
+
+    for i in range(1000):
+        winsize = np.random.choice(winsizes)
+        stride_pcnt = np.random.choice(stride_pcnts)
+        CONFIG['WINDOW_SIZE'] = int(winsize)
+        CONFIG['WINDOW_STRIDE'] = int(np.ceil(winsize * stride_pcnt))
+        while True:
+            d,w,_ = sample_regnet()
+            sys.stdout = open(os.devnull, 'w')
+            params = sum([p.numel() for p in RegNetClassifier(winsize=CONFIG['WINDOW_SIZE'],in_channels=3,stem_out_c=w[0],d=d,w=w,d_model=CONFIG['DMODEL'],b=1,g=1,p_dropout=0.1,ntrans=CONFIG['NTL'],nhead=2,maskpct=CONFIG['MASKPCT'],weights_file=None,freeze=True).parameters()])
+            sys.stdout = sys.__stdout__
+            if params < 1000000:
+                break
+        CONFIG['DEPTHI'] = d
+        CONFIG['WIDTHI'] = w
+        try:
+            try_wrapper(
+                CONFIG=CONFIG, 
+                weights_file=None, 
+                freeze=False, 
+                epochs=200, 
+                patience=50, 
+                project_dir='stride-search-rand', 
+                label=f'{i}:w{winsize}-s{CONFIG["WINDOW_STRIDE"]}-d{d}-w{w}'
+            )
+        except FileExistsError:
+            pass
 
 if __name__ == '__main__':
-    # train_pretrained_models()
-    stride_search()
+    if len(sys.argv) == 1:
+        train_mae_9_class()
+        exit(0)
+    
+    locals()[sys.argv[1]]()

@@ -51,7 +51,6 @@ class XBlockMAE(nn.Module):
         padding = get_padding(seq_len, self.seq_len, kernel_size, stride)
 
         self.use_relu = relu
-        g=1
         # self.c = nn.Sequential(
         #     nn.Conv1d(in_channels, in_channels // b, kernel_size=1, padding=0),
         #     nn.LayerNorm((seq_len)),
@@ -64,12 +63,9 @@ class XBlockMAE(nn.Module):
         #     nn.ReLU()
         # )
         self.c = nn.Sequential(
-            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, groups=1, stride=stride),
+            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, groups=g, stride=stride),
             nn.LayerNorm((self.seq_len)),
             nn.ReLU()
-            # nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, padding=padding, groups=1),
-            # nn.LayerNorm((self.seq_len)),
-            # nn.ReLU()
         )
         if self.use_relu:
             self.c.add_module('relu', nn.ReLU())
@@ -348,7 +344,39 @@ class RegNetClassifier(nn.Module):
     
 
 
+class XBlockMAEv2(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, seq_len, b, g, p_dropout=None, relu=True):
+        super().__init__()
 
+        stride = 1
+        self.seq_len = seq_len
+        # if out_channels > in_channels:
+        #     stride = 2
+        #     self.seq_len = seq_len // 2 if seq_len % 2 == 0 else seq_len // 2 + 1
+
+        padding = get_padding(seq_len, self.seq_len, kernel_size, stride)
+
+        self.use_relu = relu
+        self.c = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, groups=g, stride=stride),
+            nn.LayerNorm((self.seq_len)),
+            nn.ReLU()
+        )
+        if self.use_relu:
+            self.c.add_module('relu', nn.ReLU())
+        if p_dropout is not None:
+            self.c.add_module('dropout', nn.Dropout(p=p_dropout))
+
+        self.identity = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=1, padding=0, stride=stride),
+            nn.LayerNorm((self.seq_len)),
+            nn.ReLU(),
+        ) if out_channels > in_channels else nn.Identity()
+
+        self.outrelu = nn.ReLU() if relu else nn.Identity() 
+
+    def forward(self, x):
+        return self.outrelu(self.c(x) + self.identity(x))
 
 class RegNetMAEv2(nn.Module):
     def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, d_model, b=1, g=1, p_dropout=None, maskpct=0.75, ntrans=1, nhead=1):
@@ -373,13 +401,13 @@ class RegNetMAEv2(nn.Module):
         
         w = [stem_out_c] + list(w)
         stem_pre_ln = math.floor(((winsize-1))/2+1)
-        stem_out_len = math.floor(((stem_pre_ln-3))/2+1)
+        stem_out_len = stem_pre_ln#math.floor(((stem_pre_ln-3))/2+1)
 
         s = nn.Sequential()
         for i in range(self.n_stage):
             rs = nn.Sequential()
             for j in range(d[i]):
-                rs.add_module(f'e_stage-{i}_block-{j}', XBlockMAE(
+                rs.add_module(f'e_stage-{i}_block-{j}', XBlockMAEv2(
                     w[i] if j==0 else w[i+1], 
                     w[i+1], 
                     kernel_size=3, 
@@ -394,7 +422,7 @@ class RegNetMAEv2(nn.Module):
         self.e = nn.Sequential(
             nn.Conv1d(in_channels, stem_out_c, kernel_size=3, stride=2, padding=1),
             nn.LayerNorm((stem_pre_ln)),
-            nn.MaxPool1d(kernel_size=2,stride=2),
+            # nn.MaxPool1d(kernel_size=2,stride=2),
             nn.ReLU(),
             s
         )
@@ -412,37 +440,20 @@ class RegNetMAEv2(nn.Module):
             Permute(0,2,1),
             nn.Conv1d(d_model, w[-1], 1),
         )
-
-        ds = nn.Sequential()
-        for i in range(self.n_stage):
-            rs = nn.Sequential()
-            for j in range(d[-i-1]):
-                in_seq = rs[-1].seq_len if j>0 else ds[-1][-1].seq_len if i>0 else self.trans_seq_len
-                out_seq = in_seq if j < d[-i-1]-1 else s[-i-2][0].seq_len if i < self.n_stage-1 else stem_out_len
-
-                rs.add_module(f'd-stage-{len(d)-i-1}_block-{d[-i-1]-j-1}', XDecoderBlockMAE(
-                    w[-i-1], 
-                    w[-i-2] if j == d[-i-1]-1 else w[-i-1], 
-                    kernel_size=3, 
-                    seq_len=in_seq,
-                    out_seq=out_seq,
-                    b=1, 
-                    g=1, 
-                    relu=True,
-                    p_dropout=0.01
-                ))
-            ds.add_module(f'd_stage-{len(d)-i-1}', rs)
-
         self.dec = nn.Sequential(
-            ds,
-            nn.Upsample(size=stem_pre_ln, mode='linear'),
-            nn.ConvTranspose1d(w[0], in_channels, kernel_size=3, stride=2, padding=1, output_padding=get_out_padding(stem_out_len, winsize)),
+            nn.Conv1d(w[-1], w[-1], kernel_size=3, padding=1),
+            nn.LayerNorm((stem_out_len)),
+            # nn.Conv1d(w[-1], w[-1], kernel_size=3, padding=1),
+            # nn.LayerNorm((stem_out_len)),
+            nn.Upsample(size=winsize, mode='linear'),
+            nn.ConvTranspose1d(w[-1], 3, kernel_size=1)
         )
 
     def forward(self, x):
         x = self.e(x)
         x = self.mask(x)
-        x = self.transformer_encoder(x)
+        x = x + self.transformer_encoder(x)
+        # x = self.transformer_encoder(x)
         x = self.dec(x)
         return x
     
@@ -458,3 +469,78 @@ class RegNetMAEv2(nn.Module):
             chunked[i][mi] = torch.zeros_like(chunked[i][mi], device=x.device)
         x = torch.cat(chunked, dim=2)
         return x
+
+class RegNetClassifierV2(nn.Module):
+    def __init__(self, winsize, in_channels, stem_out_c, d: tuple, w: tuple, d_model=192, b=1, g=1, p_dropout=None, maskpct=0.75, ntrans=1, nhead=1, weights_file=None, freeze=False):
+        """
+            stem_out_c: out channels of stem before first stage
+            d: tuple of num blocks in each stage
+            w: tuple of num channels in each stage
+            can leave d_model, b, g, maskpct, ntrans, nhead as default if no weights file
+        """        
+        super().__init__()
+        self.winsize = winsize
+        self.in_channels = in_channels
+        self.stem_out_c = stem_out_c
+        self.n_stage = len(d)
+        if len(w) != len(d):
+            raise ValueError('d and w must have same length')
+        
+        self.d_str = '-'.join([str(di) for di in d])
+        self.w_str = '-'.join([str(wi) for wi in w])
+        self.g = g
+        self.b = b
+        self.p_dropout = p_dropout
+
+        self.autoencoder_params = dict(
+            winsize=winsize, 
+            in_channels=in_channels, 
+            stem_out_c=stem_out_c, 
+            d=d, 
+            w=w, 
+            d_model=d_model, 
+            b=b, 
+            g=g, 
+            p_dropout=p_dropout, 
+            maskpct=maskpct, 
+            ntrans=ntrans, 
+            nhead=nhead
+        )
+
+        self.weights_file = weights_file
+        self.freeze = freeze
+
+        s = nn.Sequential()
+        w = [stem_out_c] + list(w)
+
+        stem_pre_ln = math.floor(((winsize-1))/2+1)
+        stem_out_len = math.floor(((stem_pre_ln-3))/2+1)
+        
+        self.e, encoder_outdims = self.get_encoder()
+
+        self.o = nn.Sequential(
+            nn.AvgPool1d(kernel_size=encoder_outdims), # Nxdims[-1]x1
+            nn.Flatten(start_dim=1), # Nxdims[-1]
+            nn.Linear(in_features=w[-1], out_features=5)
+        )
+
+    def forward(self, x):
+        x = self.e(x)
+        x = self.o(x)
+        return x
+    
+    def get_encoder(self):
+        autoencoder = RegNetMAEv2(**self.autoencoder_params)
+
+        if self.weights_file:
+            print("Model is loading pretrained encoder")
+            autoencoder.load_state_dict(torch.load(self.weights_file))
+        
+        encoder = autoencoder.e
+
+        if self.freeze:
+            print("Model is freezing encoder")
+            for p in encoder.parameters():
+                p.requires_grad = False
+        
+        return encoder, autoencoder.trans_seq_len

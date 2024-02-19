@@ -510,7 +510,7 @@ def optimization_loop_multi_class(
             highest_f1 = macro_f1i
         
         if outdir:
-            torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
+            # torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
             torch.save(train_loss, stats_dir / 'train_loss.pt')
             torch.save(dev_loss, stats_dir / 'dev_loss.pt')
             torch.save(prec, stats_dir / 'prec.pt')
@@ -520,8 +520,7 @@ def optimization_loop_multi_class(
 
             # Save model with highest f1
             if higher:
-                if epoch % 10 == 0:
-                    torch.save(model.state_dict(), outdir / f'best_model.pt')
+                torch.save(model.state_dict(), outdir / f'best_model.pt')
                 info['best_model'] = epoch
                 info['loss'] = dev_loss[-1]
                 info['precision'] = preci.tolist()
@@ -640,10 +639,10 @@ def optimization_loop_xonly(
             lowest_loss = dev_loss[-1]
 
         if outdir:
-            if epoch % 10 == 0:
-                torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
-                torch.save(train_loss, stats_dir / 'train_loss.pt')
-                torch.save(dev_loss, stats_dir / 'dev_loss.pt')
+            # if epoch % 10 == 0:
+                # torch.save(model.state_dict(), model_outdir / f'{epoch}.pt')
+            torch.save(train_loss, stats_dir / 'train_loss.pt')
+            torch.save(dev_loss, stats_dir / 'dev_loss.pt')
             plot_and_save_losses(train_loss, dev_loss, epochs, str(outdir / 'loss.jpg'))
 
             # Save model with lowest loss
