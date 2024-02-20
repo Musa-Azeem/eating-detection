@@ -138,10 +138,13 @@ if __name__ == '__main__':
                 break
         CONFIG['DEPTHI'] = d
         CONFIG['WIDTHI'] = w
-        try_wrapper(
-            CONFIG, 
-            project_dir='9_regnet-mae/mae-search',
-            epochs=200, 
-            patience=50, 
-            label=f'{i}:w{CONFIG["WINDOW_SIZE"]}-s{CONFIG["WINDOW_STRIDE"]}-d{d}-w{w}'
-        )
+        try:
+            try_wrapper(
+                CONFIG, 
+                project_dir='9_regnet-mae/mae-search',
+                epochs=200, 
+                patience=50, 
+                label=f'{i}:w{CONFIG["WINDOW_SIZE"]}-s{CONFIG["WINDOW_STRIDE"]}-d{d}-w{w}'
+            )
+        except FileExistsError:
+            pass
