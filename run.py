@@ -72,6 +72,7 @@ def train_mae_9(CONFIG, project_dir, epochs=1000, patience=200, label='', outdir
         f'_ntl{model.ntrans}_nth{model.nhead}_dmodel{model.d_model}'
         f'_maskpct{model.maskpct}{outdirlabel}'
     )
+    print('here')
     optimization_loop_xonly(
         model,
         trainloader,
@@ -133,17 +134,14 @@ if __name__ == '__main__':
             params = sum([p.numel() for p in RegNetMAEv2(winsize=CONFIG['WINDOW_SIZE'],in_channels=3,stem_out_c=w[0],d=d,w=w,d_model=CONFIG['DMODEL'],b=1,g=1,p_dropout=0.1,ntrans=CONFIG['NTL'],nhead=2,maskpct=CONFIG['MASKPCT']).parameters()])
             sys.stdout = sys.__stdout__
             print(params)
-            if params < 5000000:
+            if params < 3000000:
                 break
         CONFIG['DEPTHI'] = d
         CONFIG['WIDTHI'] = w
-        try:
-            try_wrapper(
-                CONFIG, 
-                project_dir='9_regnet-mae/mae-search',
-                epochs=200, 
-                patience=50, 
-                label=f'{i}:w{CONFIG["WINDOW_SIZE"]}-s{CONFIG["WINDOW_STRIDE"]}-d{d}-w{w}'
-            )
-        except FileExistsError:
-            pass
+        try_wrapper(
+            CONFIG, 
+            project_dir='9_regnet-mae/mae-search',
+            epochs=200, 
+            patience=50, 
+            label=f'{i}:w{CONFIG["WINDOW_SIZE"]}-s{CONFIG["WINDOW_STRIDE"]}-d{d}-w{w}'
+        )
