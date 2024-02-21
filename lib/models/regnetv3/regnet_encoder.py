@@ -1,7 +1,6 @@
 import torch
 from torch import nn
-from lib.models.regnetv3.modules import get_lout
-from lib.models.regnetv3.xblockv3 import XBlockV3
+from lib.models.regnetv3.modules import get_lout, XBlockV3
 import math
 
 class RegNetEncoder(nn.Module):
