@@ -16,8 +16,8 @@ class RegNetv3(nn.Module):
             stem_out_c = CONFIG['WIDTHI'][0]
             d = CONFIG['DEPTHI']
             w = CONFIG['WIDTHI']
-            weights_file = CONFIG['WEIGHTS_FILE']
-            freeze = CONFIG['FROZEN']
+            weights_file = CONFIG.get('WEIGHTS_FILE', None)
+            freeze = CONFIG.get('FROZEN', False)
         if not stem_out_c:
             stem_out_c = w[0]
 

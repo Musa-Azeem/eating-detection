@@ -56,7 +56,7 @@ class RegNetEncoder(nn.Module):
         if weights_file:
             print("Model is loading pretrained encoder")
             weights = {k[2:]:v for k,v in torch.load(weights_file).items() if k.startswith('e.')}
-            self.e.load_state_dict(weights)
+            self.load_state_dict(weights)
         if freeze:
             print("Freezing encoder")
             for p in self.e.parameters():
