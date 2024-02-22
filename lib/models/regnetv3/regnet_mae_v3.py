@@ -6,12 +6,24 @@ from lib.models.regnetv3.modules import Permute, PositionalEncoding, Mask
 class RegNetMAEv3(nn.Module):
     def __init__(
             self, 
-            winsize, in_channels, stem_out_c, d, w, 
+            winsize=None, in_channels=3, stem_out_c=None, d=None, w=None, 
             g=1, p_dropout=0, 
             d_model=64, ntrans=1, nhead=2, trans_dropout=0.01, tran_linear_dim=2048,
             maskpct=0.15, n_mask_chunks=10, mask_type='zeros', 
+            CONFIG=None
         ):
         super().__init__()
+        if CONFIG:
+            winsize = CONFIG['WINDOW_SIZE']
+            stem_out_c = CONFIG['WIDTHI'][0]
+            maskpct = CONFIG['MASKPCT']
+            d = CONFIG['DEPTHI']
+            w = CONFIG['WIDTHI']
+            d_model = CONFIG['DMODEL']
+            ntrans = CONFIG['NTL']
+        if not stem_out_c:
+            stem_out_c = w[0]
+
         self.maskpct = maskpct
 
         # dont change the name of self.e
@@ -39,12 +51,19 @@ class RegNetMAEv3(nn.Module):
             s = 2 if in_c < width else 1
             self.decoder.add_module(
                 f"decoder-{i}_w{width}",
-                nn.ConvTranspose1d(in_c, width, kernel_size=3, stride=s),
+                nn.ConvTranspose1d(in_c, width, kernel_size=3, stride=s, groups=g),
             )
+        self.decoder.add_module(
+            "decoder-final",
+            nn.Sequential(
+                nn.Upsample(size=(winsize//2)),
+                nn.ConvTranspose1d(w[-1], in_channels, kernel_size=3, stride=2)
+            )
+        )
         print('latent dim:',self.e.latent_dim)
     def forward(self, x):
         x = self.e(x)
         x = self.mask(x)
         x = self.trans_skip(x) + self.transformer_encoder(x)
-        x = self.decoder(x)
+        x = self.decoder(x) + self.decoder_skip(x)
         return x

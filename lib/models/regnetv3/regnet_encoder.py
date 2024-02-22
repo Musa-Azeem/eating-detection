@@ -10,6 +10,8 @@ class RegNetEncoder(nn.Module):
             raise ValueError('d and w must have same length')
         if stem_out_c > w[0]:
             raise ValueError('stem_out_c must be less than or equal to w[0]')
+        if lin % 2 == 0:
+            raise ValueError('winsize must be odd')
         
         k = 3
         s = 2
