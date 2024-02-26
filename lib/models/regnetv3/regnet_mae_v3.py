@@ -21,6 +21,7 @@ class RegNetMAEv3(nn.Module):
             w = CONFIG['WIDTHI']
             d_model = CONFIG['DMODEL']
             ntrans = CONFIG['NTL']
+            p_dropout = CONFIG['PDROPOUT']
         if not stem_out_c:
             stem_out_c = w[0]
 

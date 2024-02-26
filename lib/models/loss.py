@@ -16,3 +16,11 @@ class CosineEmbeddingLossPositive(nn.Module):
             self.pre_sim(input2),
             torch.ones(input1.shape[0]).to(input1.device),
         )
+    
+class CosineMSELoss(nn.Module):
+    def __init__(self, margin=0.0, reduction='mean', batched=True):
+        super().__init__()
+        self.sim = CosineEmbeddingLossPositive(margin, reduction, batched)
+        self.mse = nn.MSELoss(reduction=reduction)
+    def forward(self, x1, x2):
+        return self.sim(x1, x2) + self.mse(x1, x2)

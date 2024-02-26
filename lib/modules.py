@@ -606,7 +606,7 @@ def optimization_loop_xonly(
     lowest_loss = float('inf')
     early_stop_counter = 0
 
-    pbar = tqdm(range(s, s+epochs))
+    pbar = tqdm(range(s, s+epochs), position=0, leave=True)
     for epoch in pbar:
         lower = False
 
@@ -681,7 +681,8 @@ def inner_train_loop_xonly(
 
     model.train()
     lossi = []
-    for Xtr in trainloader:
+    pbar = tqdm(trainloader, position=1, leave=True)
+    for Xtr in pbar:
         Xtr = Xtr.to(device)
 
         # Forward pass
