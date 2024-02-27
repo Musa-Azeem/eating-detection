@@ -681,7 +681,7 @@ def inner_train_loop_xonly(
 
     model.train()
     lossi = []
-    pbar = tqdm(trainloader, position=1, leave=True)
+    pbar = tqdm(trainloader, position=1, leave=None)
     for Xtr in pbar:
         Xtr = Xtr.to(device)
 
