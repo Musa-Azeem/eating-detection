@@ -796,7 +796,7 @@ def sample_regnet():
     quantized_width = 8 * np.round(quantized_width / 8)
 
     w, d = np.unique(quantized_width.astype(int), return_counts=True)
-    if len(d) != 4:
+    if len(d) > 4:
         return sample_regnet()
     else:
         return [int(di) for di in d],[int(wi) for wi in w],[wi for wi,di in zip(w,d) for i in range(di)]

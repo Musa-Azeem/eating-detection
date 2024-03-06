@@ -17,6 +17,7 @@ def train_mae_9(CONFIG, outdir, epochs=1000, patience=200, label=''):
     criterion = CosineMSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
+    sys.stdout = open(os.devnull, 'w')
     trainloader, testloader = load_raw(
         RAW_DIR,
         CONFIG['WINDOW_SIZE'],
@@ -26,6 +27,7 @@ def train_mae_9(CONFIG, outdir, epochs=1000, patience=200, label=''):
         chunk_len_hrs=0.25,
         stride=CONFIG['WINDOW_STRIDE']
     )
+    sys.stdout = sys.__stdout__
 
     optimization_loop_xonly(
         model,
@@ -77,42 +79,62 @@ def train_multi_class(CONFIG, outdir, epochs=1000, patience=200, weights_file=No
 def random_search():
     for i in range(1000):
         CONFIG = {
-            'WINDOW_SIZE':3901,
-            'WINDOW_STRIDE':3901 // 4,
-            'NURSING_STRIDE': 3901,
-            'BATCH_SIZE':128,
+            'WINDOW_SIZE':2001,
+            'WINDOW_STRIDE':2001 // 8,
+            'NURSING_STRIDE': 2001 // 4,
+            'BATCH_SIZE':512,
             'LEARNING_RATE':3e-4,
             'TEST_SIZE':0.1,
             'NURSING_TEST_SIZE': 0.25,
-            'DEVICE':'cuda:0',
-            'DEPTHI': [2],
-            'WIDTHI': [64],
+            'DEVICE':'cuda:1',
+            'DEPTHI': [],
+            'WIDTHI': [],
             'NTL': 1,
-            'DMODEL': 64,
-            'MASKPCT': 0.15,
+            'DMODEL': 0,
+            'MASKPCT': 0.4,
             'PDROPOUT': 0.01,
         }
-        CONFIG['DMODEL'] = int(np.random.choice([64,128,256]))
-        CONFIG['NTL'] = int(np.random.choice([1,2,3]))
         while True:
+            np.random.seed()
             d,w,_ = sample_regnet()
+            CONFIG['DEPTHI'] = d
+            CONFIG['WIDTHI'] = w
+            CONFIG['DMODEL'] = w[-1]
             sys.stdout = open(os.devnull, 'w')
             params = sum([p.numel() for p in RegNetMAEv3(CONFIG=CONFIG).parameters()])
             sys.stdout = sys.__stdout__
-            print(params)
-            if params < 3000000:
+            print(d,w,params)
+            if params < 5_000_000:
                 break
-        CONFIG['DEPTHI'] = d
-        CONFIG['WIDTHI'] = w
+        outdir = f'dev/9_regnet-mae/random-search/{d}-{w}'
         try:
             train_mae_9(
                 CONFIG, 
-                project_dir='9_regnet-mae/mae-search',
-                epochs=200, 
+                outdir=outdir,
+                epochs=2000, 
                 patience=50,
-                label=f'{i}:w{CONFIG["WINDOW_SIZE"]}-s{CONFIG["WINDOW_STRIDE"]}-d{d}-w{w}'
+                label=f'{i}:d{d}-w{w}'
+            )
+            train_multi_class(
+                CONFIG,
+                outdir=outdir.replace('random-search','random-search-class') + '-nopretrain',
+                epochs=500,
+                patience=50,
+                weights_file=f'{outdir}/best_model.pt',
+                freeze=False,
+                label=f'{i}:{d}-{w}_class-nopretrain'
+            )            
+            train_multi_class(
+                CONFIG,
+                outdir=outdir.replace('random-search','random-search-class') + '-unfrozen',
+                epochs=500,
+                patience=50,
+                weights_file=f'{outdir}/best_model.pt',
+                freeze=False,
+                label=f'{i}:{d}-{w}_class'
             )
         except FileExistsError:
+            print('File exists')
             pass
 
 def train_ae():
@@ -192,16 +214,4 @@ def train_ae_and_class():
             )
 import json
 if __name__ == '__main__':
-    for ae_dir in Path('dev/9_regnet-mae/winsize-search').iterdir():
-        outdir = str(ae_dir).replace('winsize-search','winsize-search-class') + '-unfrozen'
-        CONFIG = json.load(open(ae_dir / 'config.json'))
-        CONFIG['DEVICE'] = 'cuda:0'
-        train_multi_class(
-            CONFIG,
-            outdir=outdir,
-            epochs=500,
-            patience=50,
-            weights_file=f'{outdir}/best_model.pt',
-            freeze=False,
-            label=f'w{CONFIG["WINDOW_SIZE"]}-maskpct{CONFIG["MASKPCT"]}_class'
-        )
+    random_search()

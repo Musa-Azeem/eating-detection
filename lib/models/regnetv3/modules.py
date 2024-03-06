@@ -17,7 +17,7 @@ class XBlockV3(nn.Module):
         
         self.c = nn.Sequential(
             nn.Conv1d(in_channels, out_channels, kernel_size=k, padding=p, groups=g, stride=s),
-            nn.LayerNorm((lout)),
+            nn.LayerNorm((lout), elementwise_affine=False),
             nn.ReLU(),
             nn.Dropout(p=p_dropout),
         )
