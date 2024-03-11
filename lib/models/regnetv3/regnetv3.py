@@ -27,5 +27,7 @@ class RegNetv3(nn.Module):
             nn.Flatten(start_dim=1), # Nxdims[-1]
             nn.Linear(in_features=w[-1], out_features=5)
         )
-    def forward(self, x):
+    def forward(self, x, return_embedding=False):
+        if return_embedding:
+            return self.o[0:2](self.e(x))
         return self.o(self.e(x))

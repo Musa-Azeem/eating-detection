@@ -8,13 +8,13 @@ from torch import nn
 import numpy as np
 import sys
 import os
-from lib.models import RegNetv3
+from lib.models import RegNetv3, RegNetv3Ci
 from lib.modules import optimization_loop_multi_class
 from lib.data.dataloading import load_nursing_5_class
     
 def train_mae_9(CONFIG, outdir, epochs=1000, patience=200, label=''):
     model = RegNetMAEv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
-    criterion = CosineMSELoss()
+    criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
     sys.stdout = open(os.devnull, 'w')
@@ -47,6 +47,7 @@ def train_mae_9(CONFIG, outdir, epochs=1000, patience=200, label=''):
 def train_multi_class(CONFIG, outdir, epochs=1000, patience=200, weights_file=None, freeze=False, label=''):
     CONFIG['FROZEN'] = freeze
     CONFIG['PRETRAINED'] = weights_file is not None 
+    CONFIG['WEIGHTS_FILE'] = weights_file
 
     nursing_trainloader, nursing_testloader = load_nursing_5_class(
         range(11,71), 
@@ -58,7 +59,56 @@ def train_multi_class(CONFIG, outdir, epochs=1000, patience=200, weights_file=No
 
     model = RegNetv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+    optimizer = torch.optim.Adam(
+        [
+            {"params": model.o.parameters()},
+            {"params": model.e.parameters(), "lr": CONFIG['ENC_LEARNING_RATE']},
+        ],
+        lr=CONFIG['CLASS_LR']
+    )
+    # optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
+
+    optimization_loop_multi_class(
+        model,
+        nursing_trainloader,
+        nursing_testloader,
+        criterion,
+        optimizer,
+        epochs=epochs,
+        device=CONFIG['DEVICE'],
+        patience=patience,
+        outdir=outdir,
+        writer=outdir,
+        config=CONFIG,
+        label=label
+    )
+def train_multi_class_ci(CONFIG, outdir, epochs=1000, patience=200, weights_file=None, freeze=False, label=''):
+    CONFIG['FROZEN'] = freeze
+    CONFIG['PRETRAINED'] = weights_file is not None 
+    CONFIG['WEIGHTS_FILE'] = weights_file
+
+    nursing_trainloader, nursing_testloader = load_nursing_5_class(
+        range(11,71), 
+        CONFIG['WINDOW_SIZE'], 
+        test_size=CONFIG['NURSING_TEST_SIZE'], 
+        batch_size=CONFIG['BATCH_SIZE'],
+        stride=CONFIG['NURSING_STRIDE'],
+    )
+
+    model = RegNetv3Ci(CONFIG=CONFIG).to(CONFIG['DEVICE'])
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(
+        [
+            {"params": model.o.parameters()},
+            {"params": [
+                *model.e.parameters(),
+                *model.trans_skip.parameters(), 
+                *model.transformer_encoder.parameters()
+            ], "lr": CONFIG['ENC_LEARNING_RATE']},
+        ],
+        lr=CONFIG['CLASS_LR']
+    )
+    # optimizer = torch.optim.Adam(model.parameters(), lr=3e-4)
 
     optimization_loop_multi_class(
         model,
@@ -80,19 +130,21 @@ def random_search():
     for i in range(1000):
         CONFIG = {
             'WINDOW_SIZE':2001,
-            'WINDOW_STRIDE':2001 // 8,
-            'NURSING_STRIDE': 2001 // 4,
-            'BATCH_SIZE':512,
-            'LEARNING_RATE':3e-4,
-            'TEST_SIZE':0.1,
+            'WINDOW_STRIDE':2001 // 16,
+            'NURSING_STRIDE': 2001 // 16,
+            'BATCH_SIZE': 128,
+            'LEARNING_RATE': 1e-3,
+            'CLASS_LR': 3e-4,
+            'ENC_LEARNING_RATE': 5e-5,
+            'TEST_SIZE': 0.1,
             'NURSING_TEST_SIZE': 0.25,
-            'DEVICE':'cuda:1',
+            'DEVICE': 'cuda:1',
             'DEPTHI': [],
             'WIDTHI': [],
             'NTL': 1,
             'DMODEL': 0,
-            'MASKPCT': 0.4,
-            'PDROPOUT': 0.01,
+            'MASKPCT': 0.5,
+            'PDROPOUT': 0.0,
         }
         while True:
             np.random.seed()
@@ -104,9 +156,10 @@ def random_search():
             params = sum([p.numel() for p in RegNetMAEv3(CONFIG=CONFIG).parameters()])
             sys.stdout = sys.__stdout__
             print(d,w,params)
-            if params < 5_000_000:
+            if params > 10_000_000 and params < 30_000_000:
                 break
-        outdir = f'dev/9_regnet-mae/random-search/{d}-{w}'
+        outdir = f'dev/9_regnet-mae/random-search-2/mae/{d}-{w}'
+
         try:
             train_mae_9(
                 CONFIG, 
@@ -117,16 +170,25 @@ def random_search():
             )
             train_multi_class(
                 CONFIG,
-                outdir=outdir.replace('random-search','random-search-class') + '-nopretrain',
+                outdir=outdir.replace('mae','class') + '-nopretrain-unfrozen',
                 epochs=500,
                 patience=50,
-                weights_file=f'{outdir}/best_model.pt',
+                weights_file=None,
                 freeze=False,
                 label=f'{i}:{d}-{w}_class-nopretrain'
             )            
             train_multi_class(
                 CONFIG,
-                outdir=outdir.replace('random-search','random-search-class') + '-unfrozen',
+                outdir=outdir.replace('mae','class') + '-pretrained-unfrozen',
+                epochs=500,
+                patience=50,
+                weights_file=f'{outdir}/best_model.pt',
+                freeze=False,
+                label=f'{i}:{d}-{w}_class'
+            )
+            train_multi_class_ci(
+                CONFIG,
+                outdir=outdir.replace('mae','class') + '-pretrained-ci-unfrozen',
                 epochs=500,
                 patience=50,
                 weights_file=f'{outdir}/best_model.pt',
@@ -214,4 +276,38 @@ def train_ae_and_class():
             )
 import json
 if __name__ == '__main__':
-    random_search()
+    for model_dir in Path('/home/musa/eating-detection/dev/9_regnet-mae/random-search').iterdir():
+        CONFIG = json.load((model_dir / 'config.json').open())
+        CONFIG['NURSING_STRIDE'] = CONFIG['WINDOW_SIZE'] // 16
+        CONFIG['ENC_LEARNING_RATE'] = 5e-5
+        CONFIG['CLASS_LR'] = 3e-4     
+        CONFIG['DEVICE'] = 'cuda:0' 
+        CONFIG['TRAN_LINEAR_DIM'] = 2048
+        outdir = str(model_dir).replace('random-search','random-search-class-fixed')
+        # train_multi_class(
+        #     CONFIG,
+        #     outdir=outdir + '-nopretrain',
+        #     epochs=500,
+        #     patience=50,
+        #     weights_file=None,
+        #     freeze=False,
+        #     label=f''
+        # )
+        # train_multi_class(
+        #     CONFIG,
+        #     outdir=outdir + '-pretrain',
+        #     epochs=500,
+        #     patience=50,
+        #     weights_file=f'{model_dir}/best_model.pt',
+        #     freeze=False,
+        #     label=f''
+        # )
+        train_multi_class_ci(
+            CONFIG,
+            outdir=outdir + '-pretrained-ci',
+            epochs=500,
+            patience=50,
+            weights_file=f'{model_dir}/best_model.pt',
+            freeze=False,
+            label=f''
+        )

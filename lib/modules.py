@@ -427,6 +427,7 @@ def optimization_loop_multi_class(
     config = None,
     continue_training = False
 ):
+    s = 0
     if outdir:
         outdir = Path(outdir)
         model_outdir = outdir / 'model'
@@ -440,7 +441,6 @@ def optimization_loop_multi_class(
             'recall': [],
             'f1': []
         }
-        s = 0
 
         if not continue_training:
             model_outdir.mkdir(parents=True)

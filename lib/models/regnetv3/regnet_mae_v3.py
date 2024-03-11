@@ -8,7 +8,7 @@ class RegNetMAEv3(nn.Module):
             self, 
             winsize=None, in_channels=3, stem_out_c=None, d=None, w=None, 
             g=1, p_dropout=0, 
-            d_model=64, ntrans=1, nhead=2, trans_dropout=0.01, tran_linear_dim=2048,
+            d_model=64, ntrans=1, nhead=2, trans_dropout=0.01, tran_linear_dim=None,
             maskpct=0.15, n_mask_chunks=10, mask_type='zeros', 
             CONFIG=None
         ):
@@ -22,8 +22,12 @@ class RegNetMAEv3(nn.Module):
             d_model = CONFIG['DMODEL']
             ntrans = CONFIG['NTL']
             p_dropout = CONFIG['PDROPOUT']
+            trans_dropout = CONFIG['PDROPOUT']
+            tran_linear_dim = CONFIG.get('TRAN_LINEAR_DIM', None)
         if not stem_out_c:
             stem_out_c = w[0]
+        if not tran_linear_dim:
+            tran_linear_dim = d_model*4
 
         self.maskpct = maskpct
 
