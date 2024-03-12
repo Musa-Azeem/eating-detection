@@ -22,9 +22,12 @@ import json
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
+
 # =============================================================================
 # =================== Nursing Data Loading and Processing =====================
 # =============================================================================
+
+DATA_DIR = f'{os.path.expanduser("~")}/.delta/nursing_pt'
 
 def read_nursing_session(session_idx, datapath):
     df = pd.read_csv(
@@ -47,6 +50,15 @@ def read_nursing_labels(session_idx, labelpath):
         return None
 
     return labels
+
+def read_nursing(session_idx):
+    not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+    if session_idx in not_labeled:
+        raise ValueError(f"Session index {session_idx} is not labled")
+    
+    return torch.load(f'{DATA_DIR}/{session_idx}.pt')
+
+    
 
 def read_and_window_nursing_session(session_idx, winsize, datapath, labelpath):
     df = read_nursing_session(session_idx, datapath)
@@ -553,7 +565,34 @@ def optimization_loop_multi_class(
     if writer:
         writer.close()
         
+def evaluate_loop_multi_class(
+    model: nn.Module, 
+    criterion: nn.Module, 
+    devloader: DataLoader, 
+    device: str,
+    outdir: Path = None,
+) -> any:
 
+    y_true, y_pred, confs, dev_lossi = inner_evaluate_loop_multi_class(model, devloader, criterion, device)
+    dev_loss = sum(dev_lossi) / len(devloader)
+
+    if outdir:
+        plot_and_save_cm(y_true, y_pred, outdir)
+
+    prec, recall, f1score, _ = precision_recall_fscore_support(
+        y_true, y_pred, zero_division=0.0, pos_label=1, average=None
+    )
+
+    return ({
+        "true": y_true, 
+        "pred": y_pred, 
+        "conf": confs,
+    }, {
+        "loss": dev_loss, 
+        "precision": prec, 
+        "recall": recall, 
+        "f1": f1score
+    })
 
 # =============================================================================
 # ============================ Autoencoder ====================================

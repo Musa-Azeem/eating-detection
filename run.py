@@ -277,16 +277,18 @@ def train_ae_and_class():
 import json
 if __name__ == '__main__':
     for model_dir in Path('/home/musa/eating-detection/dev/9_regnet-mae/random-search').iterdir():
+        if not '[4, 13, 3]-[48, 120, 304]' in model_dir.name:
+            continue
         CONFIG = json.load((model_dir / 'config.json').open())
         CONFIG['NURSING_STRIDE'] = CONFIG['WINDOW_SIZE'] // 16
         CONFIG['ENC_LEARNING_RATE'] = 5e-5
         CONFIG['CLASS_LR'] = 3e-4     
-        CONFIG['DEVICE'] = 'cuda:0' 
+        CONFIG['DEVICE'] = 'cuda:1' 
         CONFIG['TRAN_LINEAR_DIM'] = 2048
-        outdir = str(model_dir).replace('random-search','random-search-class-fixed')
+        outdir = str(model_dir).replace('random-search-2/mae','random-search-class-fixed')
         # train_multi_class(
         #     CONFIG,
-        #     outdir=outdir + '-nopretrain',
+        #     outdir=outdir + '-nopretrain2',
         #     epochs=500,
         #     patience=50,
         #     weights_file=None,
@@ -295,7 +297,7 @@ if __name__ == '__main__':
         # )
         # train_multi_class(
         #     CONFIG,
-        #     outdir=outdir + '-pretrain',
+        #     outdir=outdir + '-pretrain2',
         #     epochs=500,
         #     patience=50,
         #     weights_file=f'{model_dir}/best_model.pt',
@@ -304,7 +306,7 @@ if __name__ == '__main__':
         # )
         train_multi_class_ci(
             CONFIG,
-            outdir=outdir + '-pretrained-ci',
+            outdir=outdir + '-pretrained-ci2',
             epochs=500,
             patience=50,
             weights_file=f'{model_dir}/best_model.pt',

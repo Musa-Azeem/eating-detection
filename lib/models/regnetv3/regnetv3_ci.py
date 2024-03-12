@@ -38,6 +38,7 @@ class RegNetv3Ci(nn.Module):
         
         mae = RegNetMAEv3(CONFIG=CONFIG)
         if weights_file:
+            print("Model is loading pretrained encoder")
             mae.load_state_dict(torch.load(weights_file))
         if freeze:
             for param in mae.parameters():

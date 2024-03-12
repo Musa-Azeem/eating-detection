@@ -26,7 +26,10 @@ def summary(metrics: dict):
     for key in metrics:
         if isinstance(metrics[key], torch.Tensor):
             continue
-        m.append([key, metrics[key]])
+        if isinstance(metrics[key], np.ndarray):
+            m.append([key, metrics[key].mean()])
+        else:
+            m.append([key, metrics[key]])
     print(tabulate(m, headers="firstrow"))
 
 def plot_and_save_cm(
