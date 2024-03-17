@@ -33,7 +33,9 @@ class RegNetMAEv3(nn.Module):
 
         # dont change the name of self.e
         self.e = RegNetEncoder(winsize, in_channels, stem_out_c, d, w, g, p_dropout)
+
         self.mask = Mask(maskpct, n_mask_chunks, mask_type)
+
         self.trans_skip = nn.Conv1d(w[-1], d_model, kernel_size=1)
         self.transformer_encoder = nn.Sequential(
             nn.Conv1d(w[-1], d_model, kernel_size=1),
@@ -51,8 +53,8 @@ class RegNetMAEv3(nn.Module):
             nn.Upsample(size=winsize),
         )
         self.decoder = nn.Sequential()
-        for i,width in enumerate(w):
-            in_c = d_model if i==0 else w[i-1]
+        for i,width in enumerate(w[::-1]):
+            in_c = d_model if i==0 else w[-i]
             s = 2 if in_c < width else 1
             self.decoder.add_module(
                 f"decoder-{i}_w{width}",
@@ -62,7 +64,7 @@ class RegNetMAEv3(nn.Module):
             "decoder-final",
             nn.Sequential(
                 nn.Upsample(size=(winsize//2)),
-                nn.ConvTranspose1d(w[-1], in_channels, kernel_size=3, stride=2)
+                nn.ConvTranspose1d(w[0], in_channels, kernel_size=3, stride=2)
             )
         )
         print('latent dim:',self.e.latent_dim)

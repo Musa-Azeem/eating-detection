@@ -73,3 +73,10 @@ class Mask(nn.Module):
                     raise ValueError(f"mask_type {self.mask_type} not recognized")
         x = torch.cat(chunked, dim=2)
         return x
+    
+class Downsample(nn.Module):
+    def __init__(self, size):
+        super().__init__()
+        self.size = size
+    def forward(self, x):
+        return nn.functional.interpolate(x, size=self.size)

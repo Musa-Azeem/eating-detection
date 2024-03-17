@@ -226,90 +226,66 @@ def train_ae():
 
 def train_ae_and_class():
     CONFIG = {
-        'WINDOW_SIZE': 0,
-        'WINDOW_STRIDE': 0,
-        'NURSING_STRIDE': 0,
-        'BATCH_SIZE':256,
+        'WINDOW_SIZE': 2001,
+        'WINDOW_STRIDE': 2001 // 16,
+        'NURSING_STRIDE': 2001 // 16,
+        'BATCH_SIZE': 512,
         'LEARNING_RATE': 3e-4,
         'TEST_SIZE': 0.1,
         'NURSING_TEST_SIZE': 0.25,
-        'DEVICE':'cuda:1',
-        'DEPTHI': [2],
-        'WIDTHI': [64],
+        'DEVICE':'cuda:0',
+        'DEPTHI': [4, 13, 3],
+        'WIDTHI': [48, 120, 304],
         'NTL': 1,
-        'DMODEL': 64,
-        'MASKPCT': 0.0,
-        'PDROPOUT': 0.01,
+        'DMODEL': 304,
+        'MASKPCT': 0.05,
+        'PDROPOUT': 0.0,
     }
-    for winsize in [1001,2001,3001]:
-        CONFIG['WINDOW_SIZE'] = winsize
-        CONFIG['WINDOW_STRIDE'] = winsize // 4
-        CONFIG['NURSING_STRIDE'] = winsize // 4
 
-        outdir = f'dev/9_regnet-mae/winsize-search/w{winsize}-nopretrain'
-        train_multi_class(
-            CONFIG,
-            outdir=outdir.replace('winsize-search','winsize-search-class'),
-            epochs=500,
-            patience=50,
-            weights_file=None,
-            freeze=False
+    outdir = f'/home/musa/eating-detection/dev/9_regnet-mae/prototyping-3-16-24/mae2'
+    train_mae_9(
+        CONFIG, 
+        outdir=outdir,
+        epochs=100, 
+        patience=5,
+        label=f'mae'
+    )
+    train_multi_class(
+        CONFIG,
+        outdir=outdir.replace('mae2','class') + '-nopretrain',
+        epochs=500,
+        patience=50,
+        weights_file=None,
+        freeze=False,
+        label=f'no-pretrain'
+    )
+    train_multi_class(
+        CONFIG,
+        outdir=outdir.replace('mae2','class') + '-pretrained',
+        epochs=500,
+        patience=50,
+        weights_file=f'{outdir}/best_model.pt',
+        freeze=False,
+        label=f'pretrained'
         )
-        for mask_pct in [0.0, 0.4]:
-            CONFIG['MASKPCT'] = mask_pct
-            outdir = f'dev/9_regnet-mae/winsize-search/w{winsize}-maskpct{mask_pct}'
-            train_mae_9(
-                CONFIG, 
-                outdir=outdir,
-                epochs=100, 
-                patience=5,
-                label=f'w{winsize}-maskpct{mask_pct}_ae'
-            )
-            train_multi_class(
-                CONFIG,
-                outdir=outdir.replace('winsize-search','winsize-search-class'),
-                epochs=500,
-                patience=50,
-                weights_file=f'{outdir}/best_model.pt',
-                freeze=False,
-                label=f'w{winsize}-maskpct{mask_pct}_class'
-            )
+    train_multi_class_ci(
+        CONFIG,
+        outdir=outdir.replace('mae2','class') + '-nopretrain-ci',
+        epochs=500,
+        patience=50,
+        weights_file=None,
+        freeze=False,
+        label=f'no-pretained-ci'
+    )
+    train_multi_class_ci(
+        CONFIG,
+        outdir=outdir.replace('mae2','class') + '-pretrain-ci',
+        epochs=500,
+        patience=50,
+        weights_file=f'{outdir}/best_model.pt',
+        freeze=False,
+        label=f'pretained-ci'
+    )
 import json
 if __name__ == '__main__':
-    for model_dir in Path('/home/musa/eating-detection/dev/9_regnet-mae/random-search').iterdir():
-        if not '[4, 13, 3]-[48, 120, 304]' in model_dir.name:
-            continue
-        CONFIG = json.load((model_dir / 'config.json').open())
-        CONFIG['NURSING_STRIDE'] = CONFIG['WINDOW_SIZE'] // 16
-        CONFIG['ENC_LEARNING_RATE'] = 5e-5
-        CONFIG['CLASS_LR'] = 3e-4     
-        CONFIG['DEVICE'] = 'cuda:1' 
-        CONFIG['TRAN_LINEAR_DIM'] = 2048
-        outdir = str(model_dir).replace('random-search-2/mae','random-search-class-fixed')
-        # train_multi_class(
-        #     CONFIG,
-        #     outdir=outdir + '-nopretrain2',
-        #     epochs=500,
-        #     patience=50,
-        #     weights_file=None,
-        #     freeze=False,
-        #     label=f''
-        # )
-        # train_multi_class(
-        #     CONFIG,
-        #     outdir=outdir + '-pretrain2',
-        #     epochs=500,
-        #     patience=50,
-        #     weights_file=f'{model_dir}/best_model.pt',
-        #     freeze=False,
-        #     label=f''
-        # )
-        train_multi_class_ci(
-            CONFIG,
-            outdir=outdir + '-pretrained-ci2',
-            epochs=500,
-            patience=50,
-            weights_file=f'{model_dir}/best_model.pt',
-            freeze=False,
-            label=f''
-        )
+    train_ae_and_class()

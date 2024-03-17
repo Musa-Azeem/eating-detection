@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from lib.models.regnetv3.modules import get_lout, XBlockV3
+from lib.models.regnetv3.modules import get_lout, XBlockV3, Downsample
 import math
 
 class RegNetEncoder(nn.Module):
@@ -53,6 +53,11 @@ class RegNetEncoder(nn.Module):
         )
         self.latent_dim = seq_len
 
+        # self.skip_e = nn.Sequential(
+        #     nn.Conv1d(in_channels, w[-1], kernel_size=1),
+        #     Downsample(self.latent_dim),
+        # )
+
         if weights_file:
             print("Model is loading pretrained encoder")
             weights = {k[2:]:v for k,v in torch.load(weights_file).items() if k.startswith('e.')}
@@ -60,6 +65,8 @@ class RegNetEncoder(nn.Module):
         if freeze:
             print("Freezing encoder")
             for p in self.e.parameters():
+                p.requires_grad = False
+            for p in self.skip_e.parameters():
                 p.requires_grad = False
 
     def forward(self, x):
