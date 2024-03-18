@@ -1,7 +1,8 @@
 from pathlib import Path
 from lib.models import RegNetMAEv3, CosineMSELoss
 from lib.data.dataloading import load_raw
-from lib.modules import optimization_loop_xonly, sample_regnet
+from lib.modules import optimization_loop_xonly
+from lib.utils import sample_regnet
 from lib.config import RAW_DIR
 import torch
 from torch import nn
@@ -208,6 +209,8 @@ def train_ae():
         'LEARNING_RATE':3e-4,
         'TEST_SIZE':0.1,
         'NURSING_TEST_SIZE': 0.25,
+        'CLASS_LR': 3e-4,
+        'ENC_LEARNING_RATE': 5e-5,
         'DEVICE':'cuda:0',
         'DEPTHI': [2],
         'WIDTHI': [64],
@@ -231,6 +234,8 @@ def train_ae_and_class():
         'NURSING_STRIDE': 2001 // 16,
         'BATCH_SIZE': 512,
         'LEARNING_RATE': 3e-4,
+        'CLASS_LR': 3e-4,
+        'ENC_LEARNING_RATE': 5e-5,
         'TEST_SIZE': 0.1,
         'NURSING_TEST_SIZE': 0.25,
         'DEVICE':'cuda:0',
@@ -286,6 +291,66 @@ def train_ae_and_class():
         freeze=False,
         label=f'pretained-ci'
     )
-import json
+
+def data_search():
+    CONFIG = {
+        'WINDOW_SIZE':2001,
+        'NURSING_STRIDE': 2001 // 16,
+        'BATCH_SIZE': 512,
+        'LEARNING_RATE': 3e-4,
+        'DEVICE': 'cuda:0',
+        'DEPTHI': [],
+        'WIDTHI': [],
+        'VALIDATION': [37, 46, 70, 39, 22, 13],
+    }
+    nurses = list(set(range(11,71)) - set(CONFIG['VALIDATION']))
+    for n in [10,20,30,40,50]:
+        for i in range(20):
+            train_nurses = np.random.choice(nurses,n, replace=False)
+            CONFIG['N'] = n
+            CONFIG['TRAIN_NURSES'] = nurses
+            _, nursing_trainloader = load_nursing_5_class(
+                nurses=list(train_nurses),
+                winsize=CONFIG['WINDOW_SIZE'],
+                test_size=1,
+                batch_size=CONFIG['BATCH_SIZE'],
+                stride=CONFIG['NURSING_STRIDE']
+            )
+            _, nursing_testloader = load_nursing_5_class(
+                nurses=CONFIG['VALIDATION'],
+                winsize=CONFIG['WINDOW_SIZE'],
+                test_size=1,
+                batch_size=CONFIG['BATCH_SIZE'],
+                stride=CONFIG['NURSING_STRIDE']
+            )
+            print(len(nursing_trainloader.dataset), len(nursing_testloader.dataset))
+            
+            while True:
+                d,w,_ = sample_regnet()
+                CONFIG['DEPTHI'] = d
+                CONFIG['WIDTHI'] = w
+                params = sum([p.numel() for p in RegNetv3(CONFIG=CONFIG).parameters()])
+                if params < 3_000_000:
+                    break
+            model = RegNetv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
+            criterion = nn.CrossEntropyLoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
+
+            outdir = f"dev/dataaug/n={n}_{d}_{w}"
+            optimization_loop_multi_class(
+                model,
+                nursing_trainloader,
+                nursing_testloader,
+                criterion,
+                optimizer,
+                epochs=100,
+                patience=10,
+                device=CONFIG['DEVICE'],
+                outdir=outdir,
+                writer=outdir,
+                label=n,
+                config=CONFIG
+            )
+
 if __name__ == '__main__':
-    train_ae_and_class()
+    data_search()

@@ -67,6 +67,28 @@ class RegNetMAEv3(nn.Module):
                 nn.ConvTranspose1d(w[0], in_channels, kernel_size=3, stride=2)
             )
         )
+
+        # # ============================ Old models ============================
+        # self.decoder_skip = nn.Sequential(
+        #     nn.Conv1d(d_model, in_channels, kernel_size=1),
+        #     nn.Upsample(size=winsize),
+        # )
+        # self.decoder = nn.Sequential()
+        # for i,width in enumerate(w):
+        #     in_c = d_model if i==0 else w[i-1]
+        #     s = 2 if in_c < width else 1
+        #     self.decoder.add_module(
+        #         f"decoder-{i}_w{width}",
+        #         nn.ConvTranspose1d(in_c, width, kernel_size=3, stride=s, groups=g),
+        #     )
+        # self.decoder.add_module(
+        #     "decoder-final",
+        #     nn.Sequential(
+        #         nn.Upsample(size=(winsize//2)),
+        #         nn.ConvTranspose1d(w[-1], in_channels, kernel_size=3, stride=2)
+        #     )
+        # )
+        # # ====================================================================
         print('latent dim:',self.e.latent_dim)
     def forward(self, x):
         x = self.e(x)

@@ -815,27 +815,3 @@ def predict_and_plot_pretty_session(
             layer="below"
         )
     fig.show(renderer='browser')
-
-
-# =============================================================================
-# =============================== RegNet ======================================
-# =============================================================================
-def sample_regnet():
-    initial_width = np.round(int(np.clip(np.exp(np.random.uniform(np.log(8),np.log(64))),0,64)))
-    slope = np.round(int(np.clip(np.exp(np.random.uniform(np.log(8),np.log(64))),0,64)))
-    network_depth = int(np.clip(np.exp(np.random.uniform(np.log(1),np.log(20)+1)),0,20))
-    quantized_param = np.random.uniform(2,3)
-    # We need to derive block width and number of blocks from initial parameters.
-    parameterized_width = initial_width + slope * np.arange(network_depth)  # From equation 2
-    parameterized_block = np.log(parameterized_width / initial_width) / np.log(quantized_param)  # From equation 3
-
-    parameterized_block = np.round(parameterized_block)
-    quantized_width = initial_width * np.power(quantized_param, parameterized_block)
-    # We need to convert quantized_width to make sure that it is divisible by 8
-    quantized_width = 8 * np.round(quantized_width / 8)
-
-    w, d = np.unique(quantized_width.astype(int), return_counts=True)
-    if len(d) > 4:
-        return sample_regnet()
-    else:
-        return [int(di) for di in d],[int(wi) for wi in w],[wi for wi,di in zip(w,d) for i in range(di)]
