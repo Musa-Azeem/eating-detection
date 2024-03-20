@@ -292,20 +292,20 @@ def train_ae_and_class():
         label=f'pretained-ci'
     )
 
-def data_search():
+def data_search(reps=20, device='cuda:0'):
     CONFIG = {
         'WINDOW_SIZE':2001,
         'NURSING_STRIDE': 2001 // 16,
         'BATCH_SIZE': 512,
         'LEARNING_RATE': 3e-4,
-        'DEVICE': 'cuda:0',
+        'DEVICE': device,
         'DEPTHI': [],
         'WIDTHI': [],
         'VALIDATION': [37, 46, 70, 39, 22, 13],
     }
     nurses = list(set(range(11,71)) - set(CONFIG['VALIDATION']))
-    for n in [10,20,30,40,50]:
-        for i in range(20):
+    for i in range(reps):
+        for n in [10,20,30,40,50]:
             train_nurses = np.random.choice(nurses,n, replace=False)
             CONFIG['N'] = n
             CONFIG['TRAIN_NURSES'] = nurses
@@ -330,7 +330,7 @@ def data_search():
                 CONFIG['DEPTHI'] = d
                 CONFIG['WIDTHI'] = w
                 params = sum([p.numel() for p in RegNetv3(CONFIG=CONFIG).parameters()])
-                if params < 3_000_000:
+                if params < 15_000_000 and not Path(f"dev/dataaug/n={n}_{d}_{w}").exists():
                     break
             model = RegNetv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
             criterion = nn.CrossEntropyLoss()
@@ -343,8 +343,8 @@ def data_search():
                 nursing_testloader,
                 criterion,
                 optimizer,
-                epochs=100,
-                patience=10,
+                epochs=150,
+                patience=30,
                 device=CONFIG['DEVICE'],
                 outdir=outdir,
                 writer=outdir,
@@ -352,5 +352,13 @@ def data_search():
                 config=CONFIG
             )
 
+import threading
 if __name__ == '__main__':
-    data_search()
+    datasearch1 = lambda: data_search(20, 'cuda:0')
+    datasearch2 = lambda: data_search(20, 'cuda:1')
+    thread1 = threading.Thread(target=datasearch1)
+    thread2 = threading.Thread(target=datasearch2)
+    thread1.start()
+    thread2.start()
+    thread1.join()
+    thread2.join()
