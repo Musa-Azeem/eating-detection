@@ -461,23 +461,28 @@ def optimization_loop_multi_class(
                 json.dump(info, f, indent=4)
             with (outdir / 'config.json').open('w') as f:
                 json.dump(config, f, indent=4)
+            highest_f1 = float('-inf')
+            train_loss = []
+            dev_loss = []
+            prec = []
+            recall = []
+            f1 = np.zeros((0, len(class_map)))
         if continue_training:
             model.load_state_dict(torch.load(outdir / 'best_model.pt'))
             train_loss = torch.load(stats_dir / 'train_loss.pt')
             dev_loss = torch.load(stats_dir / 'dev_loss.pt')
             info = json.load(info_file.open())
-            s = info['Latest Epoch'] + 1
-    
+            s = info['latest_epoch'] + 1
+            highest_f1 = np.mean(info['f1'])
+            train_loss = torch.load(stats_dir / 'train_loss.pt')
+            dev_loss = torch.load(stats_dir / 'dev_loss.pt')
+            prec = torch.load(stats_dir / 'prec.pt')
+            recall = torch.load(stats_dir / 'recall.pt')
+            f1 = torch.load(stats_dir / 'f1.pt')
+            
     if writer:
         writer = SummaryWriter(writer)
 
-    train_loss = []
-    dev_loss = []
-    prec = []
-    recall = []
-    f1 = np.zeros((0, len(class_map)))
-
-    highest_f1 = float('-inf')
     early_stop_counter = 0
 
     pbar = tqdm(range(s, s+epochs))
@@ -538,6 +543,7 @@ def optimization_loop_multi_class(
                 info['precision'] = preci.tolist()
                 info['recall'] = recalli.tolist()
                 info['f1'] = f1i.tolist()
+                info['macro_f1'] = macro_f1i
                 
             info['latest_epoch'] = epoch
             with info_file.open('w') as f:
@@ -632,17 +638,18 @@ def optimization_loop_xonly(
                 json.dump(info, f, indent=4)
             with (outdir / 'config.json').open('w') as f:
                 json.dump(config, f, indent=4)
+            lowest_loss = float('inf')
         if continue_training:
             model.load_state_dict(torch.load(outdir / 'best_model.pt'))
             train_loss = torch.load(stats_dir / 'train_loss.pt')
             dev_loss = torch.load(stats_dir / 'dev_loss.pt')
             info = json.load(info_file.open())
             s = info['Latest Epoch'] + 1
+            lowest_loss = info['Loss']
     
     if writer:
         writer = SummaryWriter(writer)    
 
-    lowest_loss = float('inf')
     early_stop_counter = 0
 
     pbar = tqdm(range(s, s+epochs), position=0, leave=True)

@@ -40,6 +40,7 @@ def load_nursing_5_class(nurses='all', winsize=2001, test_size=0.25, batch_size=
             raise ValueError(f"Some indexes are not labled")
     else:
         train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
+        print(dev_idx)
     trainloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in train_idx]),batch_size=batch_size,shuffle=True)
     devloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in dev_idx]),batch_size=batch_size,shuffle=False)
     

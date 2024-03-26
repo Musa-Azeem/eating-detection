@@ -9,7 +9,7 @@ from torch import nn
 import numpy as np
 import sys
 import os
-from lib.models import RegNetv3, RegNetv3Ci
+from lib.models import RegNetv3, RegNetv3Ci, ClassifierLSTM
 from lib.modules import optimization_loop_multi_class
 from lib.data.dataloading import load_nursing_5_class
     
@@ -292,7 +292,7 @@ def train_ae_and_class():
         label=f'pretained-ci'
     )
 
-def data_search(reps=20, device='cuda:0'):
+def n_search(reps=20, device='cuda:0'):
     CONFIG = {
         'WINDOW_SIZE':2001,
         'NURSING_STRIDE': 2001 // 16,
@@ -305,38 +305,30 @@ def data_search(reps=20, device='cuda:0'):
     }
     nurses = list(set(range(11,71)) - set(CONFIG['VALIDATION']))
     for i in range(reps):
+        while True:
+            d,w,_ = sample_regnet()
+            CONFIG['DEPTHI'] = d
+            CONFIG['WIDTHI'] = w
+            params = sum([p.numel() for p in RegNetv3(CONFIG=CONFIG).parameters()])
+            if params < 15_000_000 and not Path(f"dev/n-search-shred/n=10_{d}_{w}").exists():
+                break
         for n in [10,20,30,40,50]:
-            train_nurses = np.random.choice(nurses,n, replace=False)
             CONFIG['N'] = n
+            train_nurses = np.random.choice(nurses, n, replace=False)
             CONFIG['TRAIN_NURSES'] = nurses
-            _, nursing_trainloader = load_nursing_5_class(
-                nurses=list(train_nurses),
+            nursing_trainloader, nursing_testloader = load_nursing_5_class(
+                split=(train_nurses, CONFIG['VALIDATION']),
                 winsize=CONFIG['WINDOW_SIZE'],
-                test_size=1,
-                batch_size=CONFIG['BATCH_SIZE'],
-                stride=CONFIG['NURSING_STRIDE']
-            )
-            _, nursing_testloader = load_nursing_5_class(
-                nurses=CONFIG['VALIDATION'],
-                winsize=CONFIG['WINDOW_SIZE'],
-                test_size=1,
                 batch_size=CONFIG['BATCH_SIZE'],
                 stride=CONFIG['NURSING_STRIDE']
             )
             print(len(nursing_trainloader.dataset), len(nursing_testloader.dataset))
             
-            while True:
-                d,w,_ = sample_regnet()
-                CONFIG['DEPTHI'] = d
-                CONFIG['WIDTHI'] = w
-                params = sum([p.numel() for p in RegNetv3(CONFIG=CONFIG).parameters()])
-                if params < 15_000_000 and not Path(f"dev/dataaug/n={n}_{d}_{w}").exists():
-                    break
             model = RegNetv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
             criterion = nn.CrossEntropyLoss()
             optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
 
-            outdir = f"dev/dataaug/n={n}_{d}_{w}"
+            outdir = f"dev/n-search-shared/n={n}_{d}_{w}"
             optimization_loop_multi_class(
                 model,
                 nursing_trainloader,
@@ -348,17 +340,91 @@ def data_search(reps=20, device='cuda:0'):
                 device=CONFIG['DEVICE'],
                 outdir=outdir,
                 writer=outdir,
-                label=n,
+                label=f'{i} n={n}: ',
                 config=CONFIG
             )
 
+def k_fold(device='cuda:0'):
+    CONFIG = {
+        'WINDOW_SIZE':2001,
+        'NURSING_STRIDE': 2001 // 16,
+        'BATCH_SIZE': 512,
+        'LEARNING_RATE': 3e-4,
+        'DEVICE': device,
+        'DEPTHI': [2,2],
+        'WIDTHI': [48,128],
+        'LSTM_SEQLEN': 7,
+        'LSTM_HIDDEN': 8,
+        'LSTM_DROP': 0.25,
+        'BATCH_SIZE': 256,
+        'CLASS_LR': 3e-4
+    }
+    nurses = list(range(11, 71))[:50]
+    np.random.shuffle(nurses)
+    k = 5
+    for i in range(k):
+        val_nurses = nurses[i::k]
+        train_nurses = list(set(nurses) - set(val_nurses))
+        CONFIG['TRAIN_NURSES'] = train_nurses
+        CONFIG['VALIDATION'] = val_nurses
+        nursing_trainloader, nursing_testloader = load_nursing_5_class(
+            split=(train_nurses, val_nurses),
+            winsize=CONFIG['WINDOW_SIZE'],
+            batch_size=CONFIG['BATCH_SIZE'],
+            stride=CONFIG['NURSING_STRIDE']
+        )
+        model = RegNetv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
+        outdir = Path(f"dev/k-fold/i={i}")
+        optimization_loop_multi_class(
+            model,
+            nursing_trainloader,
+            nursing_testloader,
+            criterion,
+            optimizer,
+            epochs=150,
+            patience=30,
+            device=CONFIG['DEVICE'],
+            outdir=outdir,
+            writer=outdir,
+            label=f'{i}: ',
+            config=CONFIG
+        )
+
+        CONFIG['CLASS_WEIGHTS_FILE'] = str(outdir / 'best_model.pt')
+        nursing_trainloader, nursing_testloader = load_nursing_5_class(
+            split=(train_nurses, val_nurses),
+            winsize=CONFIG['WINDOW_SIZE']*CONFIG['LSTM_SEQLEN'],
+            batch_size=CONFIG['BATCH_SIZE'],
+            stride=CONFIG['WINDOW_SIZE']
+        )
+        model = ClassifierLSTM(CONFIG).to(CONFIG['DEVICE'])
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['CLASS_LR'])
+        lstm_outdir = Path(f'dev/k-fold/i={i}-lstm')
+        optimization_loop_multi_class(
+            model,
+            nursing_trainloader,
+            nursing_testloader,
+            criterion,
+            optimizer,
+            epochs=150,
+            device=CONFIG['DEVICE'],
+            patience=50,
+            outdir=lstm_outdir,
+            writer=lstm_outdir,
+            config=CONFIG
+        )
+
 import threading
 if __name__ == '__main__':
-    datasearch1 = lambda: data_search(20, 'cuda:0')
-    datasearch2 = lambda: data_search(20, 'cuda:1')
-    thread1 = threading.Thread(target=datasearch1)
-    thread2 = threading.Thread(target=datasearch2)
-    thread1.start()
-    thread2.start()
-    thread1.join()
-    thread2.join()
+    # datasearch1 = lambda: n_search(20, 'cuda:0')
+    # datasearch2 = lambda: n_search(20, 'cuda:1')
+    # thread1 = threading.Thread(target=datasearch1)
+    # thread2 = threading.Thread(target=datasearch2)
+    # thread1.start()
+    # thread2.start()
+    # thread1.join()
+    # thread2.join()
+    k_fold('cuda:1')
