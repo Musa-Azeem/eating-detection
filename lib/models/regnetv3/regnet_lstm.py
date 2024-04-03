@@ -13,6 +13,7 @@ class ClassifierLSTM(nn.Module):
         self.w = CONFIG['WIDTHI']
         hidden_dim = CONFIG.get('HIDDEN_DIM', 64)
         dropout = CONFIG.get('LSTM_DROP', 0.0)
+        num_layers = CONFIG.get('LSTM_LAYERS', 1)
 
         # self.regnet = RegNetv3(CONFIG=CONFIG)
         regnet = RegNetv3(CONFIG=CONFIG)
@@ -25,7 +26,7 @@ class ClassifierLSTM(nn.Module):
         self.lstm = nn.LSTM(
             input_size=self.w[-1],   # number of classes
             hidden_size=hidden_dim,
-            num_layers=1,
+            num_layers=num_layers,
             batch_first=True,
             bidirectional=True
         )

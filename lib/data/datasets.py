@@ -115,3 +115,18 @@ class WindowedDatasetWithStrideAndModeOfLabel(torch.utils.data.Dataset):
             self.X[(idx*self.stride):(idx*self.stride)+self.windowsize].transpose(0,1),
             self.y[(idx*self.stride):(idx*self.stride)+self.windowsize].mode().values
         )
+    
+class DataAug(Dataset):
+    def __init__(self, dataaug, *args, **kwargs):
+        self.dataset = WindowedDatasetWithStrideAndModeOfLabel(*args, **kwargs)
+        self.dataaug = dataaug
+    def __len__(self):
+        return len(self.dataset) * 2
+    def __getitem__(self, idx):
+        if idx % 2 == 0:
+            return self.dataset[idx // 2]
+        else:
+            x, y = self.dataset[idx // 2]
+            # Augment
+            x = self.dataaug(x)
+            return x, y

@@ -1,6 +1,6 @@
 from pathlib import Path
 from lib.models import RegNetMAEv3, CosineMSELoss
-from lib.data.dataloading import load_raw
+from lib.data.dataloading import load_raw, load_nursing_aug
 from lib.modules import optimization_loop_xonly
 from lib.utils import sample_regnet
 from lib.config import RAW_DIR
@@ -12,6 +12,7 @@ import os
 from lib.models import RegNetv3, RegNetv3Ci, ClassifierLSTM
 from lib.modules import optimization_loop_multi_class
 from lib.data.dataloading import load_nursing_5_class
+from sklearn.model_selection import train_test_split
     
 def train_mae_9(CONFIG, outdir, epochs=1000, patience=200, label=''):
     model = RegNetMAEv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
@@ -344,7 +345,7 @@ def n_search(reps=20, device='cuda:0'):
                 config=CONFIG
             )
 
-def k_fold(device='cuda:0'):
+def k_fold(device='cuda:0', startk=0, endk=9):
     CONFIG = {
         'WINDOW_SIZE':2001,
         'NURSING_STRIDE': 2001 // 16,
@@ -359,10 +360,12 @@ def k_fold(device='cuda:0'):
         'BATCH_SIZE': 256,
         'CLASS_LR': 3e-4
     }
-    nurses = list(range(11, 71))[:50]
+    nurses = list(range(11, 71)) # 60 of them
     np.random.shuffle(nurses)
-    k = 5
+    k = 10
     for i in range(k):
+        if i < startk or i > endk:
+            continue
         val_nurses = nurses[i::k]
         train_nurses = list(set(nurses) - set(val_nurses))
         CONFIG['TRAIN_NURSES'] = train_nurses
@@ -417,14 +420,80 @@ def k_fold(device='cuda:0'):
             config=CONFIG
         )
 
+import torch.nn.functional as F
+
+def aug():
+    CONFIG = {
+        'WINDOW_SIZE':2001,
+        'NURSING_STRIDE': 2001 // 16,
+        'BATCH_SIZE': 512,
+        'LEARNING_RATE': 3e-4,
+        'NURSING_TEST_SIZE': 0.15,
+        'DEVICE': 'cuda:0',
+    }
+
+    def swap_channels(x):
+        idxs = np.random.permutation(3)
+        x = x[idxs]
+        return x
+    def add_noise(x):
+        return x + torch.randn_like(x) * 0.1
+    def interpolate(x):
+        x = F.interpolate(x.unsqueeze(0), x.shape[-1]*8, mode='linear')
+        x = F.interpolate(x, x.shape[-1]//8).squeeze(0)
+        return x
+    def identity(x):
+        return x
+    
+    for i in range(200):
+        n = 30
+        nurses = np.random.choice(list(range(11,71)), n, replace=False)
+        train_nurses, dev_nurses = train_test_split(nurses, test_size=CONFIG['NURSING_TEST_SIZE'])
+        CONFIG['TRAIN_NURSES'] = train_nurses.tolist()
+        CONFIG['VALIDATION'] = dev_nurses.tolist()
+        while True:
+            d,w,_ = sample_regnet()
+            CONFIG['DEPTHI'] = d
+            CONFIG['WIDTHI'] = w
+            params = sum([p.numel() for p in RegNetv3(CONFIG=CONFIG).parameters()])
+            if params < 10_000_000 and not Path(f"dev/dataaug/{d}_{w}").exists():
+                break
+        for dataaug in [swap_channels, add_noise, interpolate, identity]:
+            CONFIG['DATAAUG'] = dataaug.__name__
+            nursing_trainloader, nursing_testloader = load_nursing_aug(
+                split=(train_nurses, dev_nurses),
+                winsize=CONFIG['WINDOW_SIZE'],
+                batch_size=CONFIG['BATCH_SIZE'],
+                stride=CONFIG['NURSING_STRIDE'],
+                dataaug=dataaug
+            )
+            model = nn.DataParallel(RegNetv3(CONFIG=CONFIG).to(CONFIG['DEVICE']), device_ids=[0,1])
+            criterion = nn.CrossEntropyLoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
+            outdir = Path(f"dev/dataaug/{i}-{d}_{w}/{dataaug.__name__}")
+            optimization_loop_multi_class(
+                model,
+                nursing_trainloader,
+                nursing_testloader,
+                criterion,
+                optimizer,
+                epochs=150,
+                patience=30,
+                device=CONFIG['DEVICE'],
+                outdir=outdir,
+                writer=outdir,
+                label=f'{i}: {dataaug.__name__}: ',
+                config=CONFIG
+            )
+
 import threading
 if __name__ == '__main__':
-    # datasearch1 = lambda: n_search(20, 'cuda:0')
-    # datasearch2 = lambda: n_search(20, 'cuda:1')
-    # thread1 = threading.Thread(target=datasearch1)
-    # thread2 = threading.Thread(target=datasearch2)
+    aug()
+    # k_fold1 = lambda: k_fold('cuda:0', 0, 4)
+    # k_fold2 = lambda: k_fold('cuda:1', 5, 9)
+    # thread1 = threading.Thread(target=k_fold1)
+    # thread2 = threading.Thread(target=k_fold2)
     # thread1.start()
     # thread2.start()
     # thread1.join()
     # thread2.join()
-    k_fold('cuda:1')

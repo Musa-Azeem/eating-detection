@@ -1,4 +1,4 @@
-from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, AccRawDatasetStrided, MultiClassDataset, WindowedDatasetWithStrideAndModeOfLabel
+from lib.data.datasets import AccAndLabelsDataset, AccRawDataset, AccRawDatasetPartitioned, AccRawDatasetStrided, MultiClassDataset, WindowedDatasetWithStrideAndModeOfLabel, DataAug
 import numpy as np
 from sklearn.model_selection import train_test_split
 from lib.modules import pad_for_windowing, read_nursing_session, read_nursing_labels, read_delta_session
@@ -14,6 +14,45 @@ from os.path import expanduser
 import pandas as pd
 import tarfile
 from tqdm import tqdm
+
+def load_nursing_aug(nurses='all', winsize=2001, test_size=0.25, batch_size=512, stride=1, split=None, dataaug=lambda x: x):
+    not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
+    unlabled_sessions = set.intersection(set(nurses), not_labeled)
+    if unlabled_sessions:
+        raise ValueError(f"Session indexes {unlabled_sessions} are not labled")
+
+    def get_dataloader(idxs, shuffle):
+        ds = ConcatDataset([DataAug(dataaug=dataaug, nurse=idx,windowsize=winsize,stride=stride) for idx in idxs])
+        return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
+
+    if nurses == 'all':
+        nurses = list(range(11, 71))
+
+    if stride == 'partition':
+        stride = winsize
+
+    if test_size == 0:
+        train_idx = nurses
+        trainloader = get_dataloader(train_idx, shuffle=True)
+        return trainloader, None
+    
+    if test_size == 1:
+        dev_idx = nurses
+        devloader = get_dataloader(dev_idx, shuffle=False)
+        return None, devloader
+    
+    if split:
+        train_idx, dev_idx = split
+        if set(train_idx).intersection(set(dev_idx)):
+            raise ValueError(f"Train and dev indexes overlap")
+        if set.intersection(set(train_idx).union(set(dev_idx)), not_labeled):
+            raise ValueError(f"Some indexes are not labled")
+    else:
+        train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
+    trainloader = get_dataloader(train_idx, shuffle=True)
+    devloader = get_dataloader(dev_idx, shuffle=False)
+    
+    return trainloader, devloader
 
 def load_nursing_5_class(nurses='all', winsize=2001, test_size=0.25, batch_size=512, stride=1, split=None):
     not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
@@ -40,7 +79,6 @@ def load_nursing_5_class(nurses='all', winsize=2001, test_size=0.25, batch_size=
             raise ValueError(f"Some indexes are not labled")
     else:
         train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
-        print(dev_idx)
     trainloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in train_idx]),batch_size=batch_size,shuffle=True)
     devloader = DataLoader(dataset=ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in dev_idx]),batch_size=batch_size,shuffle=False)
     
