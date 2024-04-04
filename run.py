@@ -425,11 +425,14 @@ import torch.nn.functional as F
 def aug():
     CONFIG = {
         'WINDOW_SIZE':2001,
-        'NURSING_STRIDE': 2001 // 16,
+        'NURSING_STRIDE': 2001 // 8,
         'BATCH_SIZE': 512,
         'LEARNING_RATE': 3e-4,
         'NURSING_TEST_SIZE': 0.15,
         'DEVICE': 'cuda:0',
+        'LSTM_SEQLEN': 7,
+        'LSTM_HIDDEN': 8,
+        'LSTM_DROP': 0.25,
     }
 
     def swap_channels(x):
@@ -437,16 +440,22 @@ def aug():
         x = x[idxs]
         return x
     def add_noise(x):
-        return x + torch.randn_like(x) * 0.1
+        return x + torch.randn_like(x) * 0.25
     def interpolate(x):
-        x = F.interpolate(x.unsqueeze(0), x.shape[-1]*8, mode='linear')
-        x = F.interpolate(x, x.shape[-1]//8).squeeze(0)
+        x = F.interpolate(x.unsqueeze(0), x.shape[-1]*16, mode='linear')
+        x = F.interpolate(x, x.shape[-1]//16).squeeze(0)
         return x
+    def inject_step(x):
+        step_len = 100
+        step = 0.2
+        steps = np.arange(0, (x.shape[-1] // step_len + 1)*step, step).repeat(step_len)[:x.shape[-1]]
+        steps = torch.tensor(steps, dtype=x.dtype).to(x.device)
+        return x + steps
     def identity(x):
         return x
     
     for i in range(200):
-        n = 30
+        n = 60
         nurses = np.random.choice(list(range(11,71)), n, replace=False)
         train_nurses, dev_nurses = train_test_split(nurses, test_size=CONFIG['NURSING_TEST_SIZE'])
         CONFIG['TRAIN_NURSES'] = train_nurses.tolist()
@@ -458,7 +467,7 @@ def aug():
             params = sum([p.numel() for p in RegNetv3(CONFIG=CONFIG).parameters()])
             if params < 10_000_000 and not Path(f"dev/dataaug/{d}_{w}").exists():
                 break
-        for dataaug in [swap_channels, add_noise, interpolate, identity]:
+        for dataaug in [inject_step, swap_channels, add_noise, interpolate, identity]:
             CONFIG['DATAAUG'] = dataaug.__name__
             nursing_trainloader, nursing_testloader = load_nursing_aug(
                 split=(train_nurses, dev_nurses),
@@ -484,6 +493,32 @@ def aug():
                 writer=outdir,
                 label=f'{i}: {dataaug.__name__}: ',
                 config=CONFIG
+            )
+
+            CONFIG['CLASS_WEIGHTS_FILE'] = str(outdir / 'best_model.pt')
+            nursing_trainloader, nursing_testloader = load_nursing_5_class(
+                split=(train_nurses, dev_nurses),
+                winsize=CONFIG['WINDOW_SIZE']*CONFIG['LSTM_SEQLEN'],
+                batch_size=CONFIG['BATCH_SIZE'],
+                stride=CONFIG['WINDOW_SIZE']
+            )
+            model = nn.DataParallel(ClassifierLSTM(CONFIG).to(CONFIG['DEVICE']), device_ids=[0,1])
+            criterion = nn.CrossEntropyLoss()
+            optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
+            lstm_outdir = Path(f'dev/dataaug/{i}-{d}_{w}/{dataaug.__name__}-lstm')
+            optimization_loop_multi_class(
+                model,
+                nursing_trainloader,
+                nursing_testloader,
+                criterion,
+                optimizer,
+                epochs=150,
+                device=CONFIG['DEVICE'],
+                patience=50,
+                outdir=lstm_outdir,
+                writer=lstm_outdir,
+                config=CONFIG,
+                label=f'{i}-{dataaug.__name__} lstm:'
             )
 
 import threading

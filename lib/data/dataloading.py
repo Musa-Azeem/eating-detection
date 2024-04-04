@@ -21,8 +21,11 @@ def load_nursing_aug(nurses='all', winsize=2001, test_size=0.25, batch_size=512,
     if unlabled_sessions:
         raise ValueError(f"Session indexes {unlabled_sessions} are not labled")
 
-    def get_dataloader(idxs, shuffle):
-        ds = ConcatDataset([DataAug(dataaug=dataaug, nurse=idx,windowsize=winsize,stride=stride) for idx in idxs])
+    def get_dataloader(idxs, shuffle, test=False):
+        if test:
+            ds = ConcatDataset([WindowedDatasetWithStrideAndModeOfLabel(nurse=idx,windowsize=winsize,stride=stride) for idx in idxs])
+        else:
+            ds = ConcatDataset([DataAug(dataaug=dataaug, nurse=idx,windowsize=winsize,stride=stride) for idx in idxs])
         return DataLoader(ds, batch_size=batch_size, shuffle=shuffle)
 
     if nurses == 'all':
@@ -38,7 +41,7 @@ def load_nursing_aug(nurses='all', winsize=2001, test_size=0.25, batch_size=512,
     
     if test_size == 1:
         dev_idx = nurses
-        devloader = get_dataloader(dev_idx, shuffle=False)
+        devloader = get_dataloader(dev_idx, shuffle=False, test=True)
         return None, devloader
     
     if split:
@@ -50,7 +53,7 @@ def load_nursing_aug(nurses='all', winsize=2001, test_size=0.25, batch_size=512,
     else:
         train_idx, dev_idx = train_test_split(nurses, test_size=test_size, random_state=0)
     trainloader = get_dataloader(train_idx, shuffle=True)
-    devloader = get_dataloader(dev_idx, shuffle=False)
+    devloader = get_dataloader(dev_idx, shuffle=False, test=True)
     
     return trainloader, devloader
 

@@ -18,7 +18,10 @@ class ClassifierLSTM(nn.Module):
         # self.regnet = RegNetv3(CONFIG=CONFIG)
         regnet = RegNetv3(CONFIG=CONFIG)
         print(f'Loading weights from {self.weights_file}')
-        regnet.load_state_dict(torch.load(self.weights_file))
+        weights = torch.load(self.weights_file)
+        if list(weights.keys())[0].startswith('module'):
+            weights = {k[7:]:v for k,v in weights.items()}
+        regnet.load_state_dict(weights)
         self.e = regnet.e
         for p in self.e.parameters():
             p.requires_grad = False
