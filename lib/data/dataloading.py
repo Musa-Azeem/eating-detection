@@ -239,7 +239,7 @@ def load_raw(raw_dir, winsize, n_hours=None, sessions=None, chunk_len_hrs=5, tes
         n_chunks = n_samples // chunk_len # if chunk_len_hrs is 5: 5 hours = 1 chunk, 10 hours = 2 chunks, etc.
         if n_chunks > len(all_acc):
             raise ValueError(f"n_hours ({n_hours}) is greater than the total number of hours ({len(all_acc)*chunk_len_hrs})")
-        random.seed(10)
+        # random.seed(10)
         idxs = random.sample(list(range(len(all_acc))), n_chunks)
         all_acc = all_acc[idxs]
         print(f"Randomly selected {n_chunks} chunks")
