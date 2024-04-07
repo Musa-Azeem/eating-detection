@@ -24,7 +24,7 @@ class DAE(nn.Module):
 
         # dont change the name of self.e
         # self.e = RegNetEncoder(winsize, in_channels, stem_out_c, d, w, g, p_dropout)
-        w = [64,128,128]
+        w = [64,128,256]
         self.e = nn.Sequential(
             nn.Conv1d(in_channels, w[0], kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
@@ -34,7 +34,7 @@ class DAE(nn.Module):
             nn.LayerNorm(501),
             nn.Conv1d(w[1], w[2], kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
-            nn.LayerNorm(251),
+            nn.LayerNorm(251)
         )
         self.e_skip = nn.Sequential(
             nn.Conv1d(in_channels, w[2], kernel_size=1),
@@ -79,8 +79,8 @@ class DAE(nn.Module):
         mask = torch.rand(x.shape[0], 1, x.shape[2]) < self.maskpct
         mask = mask.expand(-1, 3, -1)
         x = x * ~mask.to(x.device)
-        x = self.e(x) + self.e_skip(x)
-        x = self.decoder(x) + self.decoder_skip(x)
+        x = self.e(x) #+ self.e_skip(x)
+        x = self.decoder(x)# + self.decoder_skip(x)
         return x
 
 
