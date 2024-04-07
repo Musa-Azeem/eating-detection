@@ -1,6 +1,89 @@
 from torch import nn
 import torch
-from . import ResBlock
+
+class DAE(nn.Module):
+    def __init__(
+            self, 
+            winsize=None, in_channels=3, stem_out_c=None, d=None, w=None, 
+            g=1, p_dropout=0, 
+            maskpct=0.15, 
+            CONFIG=None
+        ):
+        super().__init__()
+        if CONFIG:
+            winsize = CONFIG['WINDOW_SIZE']
+            stem_out_c = CONFIG['WIDTHI'][0]
+            maskpct = CONFIG['MASKPCT']
+            d = CONFIG['DEPTHI']
+            w = CONFIG['WIDTHI']
+            p_dropout = CONFIG['PDROPOUT']
+        if not stem_out_c:
+            stem_out_c = w[0]
+
+        self.maskpct = maskpct
+
+        # dont change the name of self.e
+        # self.e = RegNetEncoder(winsize, in_channels, stem_out_c, d, w, g, p_dropout)
+        w = [64,128,128]
+        self.e = nn.Sequential(
+            nn.Conv1d(in_channels, w[0], kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.LayerNorm(1001),
+            nn.Conv1d(w[0], w[1], kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.LayerNorm(501),
+            nn.Conv1d(w[1], w[2], kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.LayerNorm(251),
+        )
+        self.e_skip = nn.Sequential(
+            nn.Conv1d(in_channels, w[2], kernel_size=1),
+            nn.Upsample(size=251),
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose1d(w[2], w[1], kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.LayerNorm(501),
+            nn.ConvTranspose1d(w[1], w[0], kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.LayerNorm(1001),
+            nn.ConvTranspose1d(w[0], in_channels, kernel_size=3, stride=2, padding=1),
+        )
+        self.decoder_skip = nn.Sequential(
+            nn.Conv1d(w[2], in_channels, kernel_size=1),
+            nn.Upsample(size=winsize),
+        )
+        # self.decoder_skip = nn.Sequential(
+        #     nn.Conv1d(w[-1], in_channels, kernel_size=1),
+        #     nn.Upsample(size=winsize),
+        # )
+        # self.decoder = nn.Sequential()
+        # winv = w[::-1] + [w[0]]
+        # for i,width in enumerate(winv[:-1]):
+        #     s = 2 if width < winv[i+1] else 1
+        #     self.decoder.add_module(
+        #         f"decoder-{i}_w{width}",
+        #         nn.ConvTranspose1d(width, winv[i+1], kernel_size=3, stride=s, groups=g),
+        #     )
+        # self.decoder.add_module(
+        #     "decoder-final",
+        #     nn.Sequential(
+        #         nn.Upsample(size=(winsize//2)),
+        #         nn.ConvTranspose1d(w[0], in_channels, kernel_size=3, stride=2)
+        #     )
+        # )
+
+        # print('latent dim:',self.e.latent_dim)
+    def forward(self, x):
+        # x = x / x.mean(dim=2, keepdim=True)
+        mask = torch.rand(x.shape[0], 1, x.shape[2]) < self.maskpct
+        mask = mask.expand(-1, 3, -1)
+        x = x * ~mask.to(x.device)
+        x = self.e(x) + self.e_skip(x)
+        x = self.decoder(x) + self.decoder_skip(x)
+        return x
+
+
 
 class MLP(nn.Module):
     def __init__(self, n_hl, winsize):
