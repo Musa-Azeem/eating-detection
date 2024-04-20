@@ -533,10 +533,10 @@ def embedding_int():
         'LSTM_SEQLEN': 7,
         'LSTM_HIDDEN': 8,
         'LSTM_DROP': 0.25,
-        'INTERPOLATED': True
     }
     epochs = 300
     for i in range(200):
+        CONFIG['INTERPOLATED'] = True
         n = 60
         nurses = np.random.choice(list(range(11,71)), n, replace=False)
         train_nurses, dev_nurses = train_test_split(nurses, test_size=CONFIG['NURSING_TEST_SIZE'])

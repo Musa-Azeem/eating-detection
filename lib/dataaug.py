@@ -41,13 +41,11 @@ def interpolate_embeddings(winsize, device, model, k, dataloader):
         ys = []
         Xs = []
         for X,y in dataloader:
-            with torch.no_grad():
-                Xs.append(X)
-                ys.append(y)
-                X = X.view(-1, 3, winsize)
-                X = X.to(device)
-                x = model.e(X)
-                embedding.append(x.detach().cpu())
+            Xs.append(X)
+            ys.append(y)
+            X = X.to(device)
+            x = model.e(X)
+            embedding.append(x.detach().cpu())
         X = torch.cat(Xs, dim=0)
         y = torch.cat(ys, dim=0)
         embedding = torch.cat(embedding, dim=0)
@@ -78,7 +76,6 @@ def interpolate_embeddings(winsize, device, model, k, dataloader):
             for cprime in cprimeloader:
                 Xprimei = model.decoder(cprime[0].to(device)).cpu()
                 Xprimeis.append(Xprimei)
-                break
             Xprimei = torch.cat(Xprimeis, dim=0)
 
             X_interpolated.append(Xprimei)

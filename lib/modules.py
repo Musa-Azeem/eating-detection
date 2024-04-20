@@ -619,7 +619,8 @@ def optimization_loop_xonly(
     label: str = '',
     writer = None,
     config = None,
-    continue_training = False
+    continue_training = False,
+    normalize = False
 ):
     train_loss = []
     dev_loss = []
@@ -657,11 +658,11 @@ def optimization_loop_xonly(
         lower = False
 
         # Train Loop
-        train_lossi = inner_train_loop_xonly(model, trainloader, criterion, optimizer, device)
+        train_lossi = inner_train_loop_xonly(model, trainloader, criterion, optimizer, device, normalize=normalize)
         train_loss.append(sum(train_lossi) / len(trainloader))            
 
         # Dev Loop
-        dev_lossi = inner_evaluate_loop_xonly(model, devloader, criterion, device)
+        dev_lossi = inner_evaluate_loop_xonly(model, devloader, criterion, device, normalize=normalize)
         dev_loss.append(sum(dev_lossi) / len(devloader))
 
         pbar.set_description(f'{label}: Epoch {epoch}: Train Loss: {train_loss[-1]:.5}: Dev Loss: {dev_loss[-1]:.5}')
@@ -723,12 +724,15 @@ def inner_train_loop_xonly(
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
     device: str,
+    normalize: bool = False
 ) -> list[float]:
 
     model.train()
     lossi = []
     pbar = tqdm(trainloader, position=1, leave=None)
     for Xtr in pbar:
+        if normalize:
+            Xtr = (Xtr - Xtr.mean(dim=(1,2), keepdim=True)) / (Xtr.std(dim=(1,2), keepdim=True) + 1e-10)
         Xtr = Xtr.to(device)
 
         # Forward pass
@@ -748,7 +752,8 @@ def inner_evaluate_loop_xonly(
     model: nn.Module,
     devloader: DataLoader,
     criterion: nn.Module,
-    device: str
+    device: str,
+    normalize: bool = False
 ) -> tuple[torch.Tensor, torch.Tensor, list[float]]:
 
     all_confs = []
@@ -757,6 +762,8 @@ def inner_evaluate_loop_xonly(
     model.eval()
     with torch.no_grad():
         for X in devloader:
+            if normalize:
+                X = (X - X.mean(dim=(1,2), keepdim=True)) / (X.std(dim=(1,2), keepdim=True) + 1e-10)
             X = X.to(device)
             logits = model(X)
             dev_lossi.append(criterion(logits, X).item())
