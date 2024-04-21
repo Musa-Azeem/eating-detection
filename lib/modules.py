@@ -254,11 +254,14 @@ def inner_train_loop(
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
     device: str,
+    normalize: bool = False
 ) -> list[float]:
 
     model.train()
     lossi = []
     for Xtr,ytr in trainloader:
+        if normalize:
+            Xtr = (Xtr - Xtr.mean(dim=(1,2), keepdim=True)) / (Xtr.std(dim=(1,2), keepdim=True) + 1e-10)
         Xtr,ytr = Xtr.to(device),ytr.to(device)
 
         # Forward pass
@@ -390,7 +393,8 @@ def inner_evaluate_loop_multi_class(
     model: nn.Module,
     devloader: DataLoader,
     criterion: nn.Module,
-    device: str
+    device: str,
+    normalize: bool = False
 ) -> tuple[torch.Tensor, torch.Tensor, list[float]]:
 
     y_preds = []
@@ -401,6 +405,8 @@ def inner_evaluate_loop_multi_class(
     model.eval()
     with torch.no_grad():
         for X,y in devloader:
+            if normalize:
+                X = (X - X.mean(dim=(1,2), keepdim=True)) / (X.std(dim=(1,2), keepdim=True) + 1e-10)
             y_true.append(y)
             X,y = X.to(device), y.to(device)
             logits = model(X)
@@ -437,7 +443,8 @@ def optimization_loop_multi_class(
         'Smoking':4,
     },
     config = None,
-    continue_training = False
+    continue_training = False,
+    normalize = False
 ):
     s = 0
     if outdir:
@@ -490,11 +497,11 @@ def optimization_loop_multi_class(
         higher = False
 
         # Train Loop
-        train_lossi = inner_train_loop(model, trainloader, criterion, optimizer, device)
-        train_loss.append(sum(train_lossi) / len(trainloader))            
+        train_lossi = inner_train_loop(model, trainloader, criterion, optimizer, device, normalize=normalize)
+        train_loss.append(sum(train_lossi) / len(trainloader))
 
         # Dev Loop
-        y_true, y_pred, confs, dev_lossi = inner_evaluate_loop_multi_class(model, devloader, criterion, device)
+        y_true, y_pred, confs, dev_lossi = inner_evaluate_loop_multi_class(model, devloader, criterion, device, normalize=normalize)
         dev_loss.append(sum(dev_lossi) / len(devloader))
 
         preci, recalli, f1i, _ = precision_recall_fscore_support(

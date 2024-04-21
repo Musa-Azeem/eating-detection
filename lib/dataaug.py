@@ -5,7 +5,7 @@ from pathlib import Path
 import json
 from torch.utils.data import ConcatDataset, DataLoader
 from sklearn.neighbors import NearestNeighbors
-
+from tqdm import tqdm
 
 def load_nursing_interpolated(winsize, batch_size, stride, split, model_path, k, device='cuda:0'):
     not_labeled = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}

@@ -1,6 +1,9 @@
 from torch import nn
 import torch
 
+class RecurrentAutoencoder(nn.Module):
+    pass
+
 class DAE(nn.Module):
     def __init__(
             self, 
@@ -19,7 +22,7 @@ class DAE(nn.Module):
 
         # dont change the name of self.e
         # self.e = RegNetEncoder(winsize, in_channels, stem_out_c, d, w, g, p_dropout)
-        w = [64,64]
+        w = [64,128,256,512]
         self.e = nn.Sequential(
             nn.Conv1d(in_channels, w[0], kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
@@ -27,8 +30,21 @@ class DAE(nn.Module):
             nn.Conv1d(w[0], w[1], kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
             nn.LayerNorm((w[1],251)),
+            nn.Conv1d(w[1], w[2], kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.LayerNorm((w[2],126)),
+            nn.Conv1d(w[2], w[3], kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.LayerNorm((w[3],63))
         )
         self.decoder = nn.Sequential(
+            nn.ConvTranspose1d(w[3], w[2], kernel_size=3, stride=2, padding=1),
+            nn.Upsample(size=126),
+            nn.ReLU(),
+            nn.LayerNorm((w[2],126)),
+            nn.ConvTranspose1d(w[2], w[1], kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.LayerNorm((w[1],251)),
             nn.ConvTranspose1d(w[1], w[0], kernel_size=3, stride=2, padding=1),
             nn.ReLU(),
             nn.LayerNorm((w[0],501)),

@@ -524,15 +524,15 @@ def aug():
 from lib.dataaug import load_nursing_interpolated
 def embedding_int():
     CONFIG = {
-        'WINDOW_SIZE':2001,
-        'NURSING_STRIDE': 2001 // 2,
+        'WINDOW_SIZE':1001,
+        'NURSING_STRIDE': 1001 // 4,
         'BATCH_SIZE': 512,
         'LEARNING_RATE': 3e-4,
         'NURSING_TEST_SIZE': 0.15,
         'DEVICE': 'cuda:0',
-        'LSTM_SEQLEN': 7,
-        'LSTM_HIDDEN': 8,
-        'LSTM_DROP': 0.25,
+        # 'LSTM_SEQLEN': 14,
+        # 'LSTM_HIDDEN': 8,
+        # 'LSTM_DROP': 0.25,
     }
     epochs = 300
     for i in range(200):
@@ -555,7 +555,7 @@ def embedding_int():
             winsize=CONFIG['WINDOW_SIZE'],
             batch_size=CONFIG['BATCH_SIZE'],
             stride=CONFIG['NURSING_STRIDE'],
-            model_path='dev/10_dae/mask40',
+            model_path='/home/musa/eating-detection/dev/10_dae/mask0.25-64-128-256-512',
             k=10
         )
         model = nn.DataParallel(RegNetv3(CONFIG=CONFIG).to(CONFIG['DEVICE']), device_ids=[0,1])
@@ -574,33 +574,36 @@ def embedding_int():
             outdir=outdir,
             writer=outdir,
             label=f'{i}: int: ',
-            config=CONFIG
-        )
-        CONFIG['CLASS_WEIGHTS_FILE'] = str(outdir / 'best_model.pt')
-        nursing_trainloader, nursing_testloader = load_nursing_5_class(
-            split=(train_nurses, dev_nurses),
-            winsize=CONFIG['WINDOW_SIZE']*CONFIG['LSTM_SEQLEN'],
-            batch_size=CONFIG['BATCH_SIZE'],
-            stride=CONFIG['WINDOW_SIZE']
-        )
-        model = nn.DataParallel(ClassifierLSTM(CONFIG).to(CONFIG['DEVICE']), device_ids=[0,1])
-        criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
-        lstm_outdir = Path(f'dev/dataauginterp/{i}-{d}_{w}/interped-lstm')
-        optimization_loop_multi_class(
-            model,
-            nursing_trainloader,
-            nursing_testloader,
-            criterion,
-            optimizer,
-            epochs=epochs,
-            device=CONFIG['DEVICE'],
-            patience=50,
-            outdir=lstm_outdir,
-            writer=lstm_outdir,
             config=CONFIG,
-            label=f'{i} int lstm:'
+            normalize=True
         )
+        # # interpolated lstm
+        # CONFIG['CLASS_WEIGHTS_FILE'] = str(outdir / 'best_model.pt')
+        # nursing_trainloader, nursing_testloader = load_nursing_5_class(
+        #     split=(train_nurses, dev_nurses),
+        #     winsize=CONFIG['WINDOW_SIZE']*CONFIG['LSTM_SEQLEN'],
+        #     batch_size=CONFIG['BATCH_SIZE'],
+        #     stride=CONFIG['WINDOW_SIZE']
+        # )
+        # model = nn.DataParallel(ClassifierLSTM(CONFIG).to(CONFIG['DEVICE']), device_ids=[0,1])
+        # criterion = nn.CrossEntropyLoss()
+        # optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
+        # lstm_outdir = Path(f'dev/dataauginterp/{i}-{d}_{w}/interped-lstm')
+        # optimization_loop_multi_class(
+        #     model,
+        #     nursing_trainloader,
+        #     nursing_testloader,
+        #     criterion,
+        #     optimizer,
+        #     epochs=epochs,
+        #     device=CONFIG['DEVICE'],
+        #     patience=50,
+        #     outdir=lstm_outdir,
+        #     writer=lstm_outdir,
+        #     config=CONFIG,
+        #     label=f'{i} int lstm:',
+        #     normalize=True
+        # )
 
         # No interpolation
         CONFIG['INTERPOLATED'] = False
@@ -626,33 +629,36 @@ def embedding_int():
             outdir=outdir,
             writer=outdir,
             label=f'{i}: no int: ',
-            config=CONFIG
-        )
-        CONFIG['CLASS_WEIGHTS_FILE'] = str(outdir / 'best_model.pt')
-        nursing_trainloader, nursing_testloader = load_nursing_5_class(
-            split=(train_nurses, dev_nurses),
-            winsize=CONFIG['WINDOW_SIZE']*CONFIG['LSTM_SEQLEN'],
-            batch_size=CONFIG['BATCH_SIZE'],
-            stride=CONFIG['WINDOW_SIZE']
-        )
-        model = nn.DataParallel(ClassifierLSTM(CONFIG).to(CONFIG['DEVICE']), device_ids=[0,1])
-        criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
-        lstm_outdir = Path(f'dev/dataauginterp/{i}-{d}_{w}/nointerped-lstm')
-        optimization_loop_multi_class(
-            model,
-            nursing_trainloader,
-            nursing_testloader,
-            criterion,
-            optimizer,
-            epochs=epochs,
-            device=CONFIG['DEVICE'],
-            patience=50,
-            outdir=lstm_outdir,
-            writer=lstm_outdir,
             config=CONFIG,
-            label=f'{i} int lstm:'
+            normalize=True
         )
+        # # non-interpolated lstm
+        # CONFIG['CLASS_WEIGHTS_FILE'] = str(outdir / 'best_model.pt')
+        # nursing_trainloader, nursing_testloader = load_nursing_5_class(
+        #     split=(train_nurses, dev_nurses),
+        #     winsize=CONFIG['WINDOW_SIZE']*CONFIG['LSTM_SEQLEN'],
+        #     batch_size=CONFIG['BATCH_SIZE'],
+        #     stride=CONFIG['WINDOW_SIZE']
+        # )
+        # model = nn.DataParallel(ClassifierLSTM(CONFIG).to(CONFIG['DEVICE']), device_ids=[0,1])
+        # criterion = nn.CrossEntropyLoss()
+        # optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['LEARNING_RATE'])
+        # lstm_outdir = Path(f'dev/dataauginterp/{i}-{d}_{w}/nointerped-lstm')
+        # optimization_loop_multi_class(
+        #     model,
+        #     nursing_trainloader,
+        #     nursing_testloader,
+        #     criterion,
+        #     optimizer,
+        #     epochs=epochs,
+        #     device=CONFIG['DEVICE'],
+        #     patience=50,
+        #     outdir=lstm_outdir,
+        #     writer=lstm_outdir,
+        #     config=CONFIG,
+        #     label=f'{i} int lstm:',
+        #     normalize=True
+        # )
 import threading
 if __name__ == '__main__':
     embedding_int()
