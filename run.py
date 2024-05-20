@@ -13,7 +13,93 @@ from lib.models import RegNetv3, RegNetv3Ci, ClassifierLSTM
 from lib.modules import optimization_loop_multi_class
 from lib.data.dataloading import load_nursing_5_class
 from sklearn.model_selection import train_test_split
-    
+import json
+
+def train():
+    CONFIG = {
+        'WINDOW_SIZE':1001,
+        'NURSING_STRIDE': 1001 // 8,
+        'BATCH_SIZE': 512,
+        'CLASS_LR': 3e-4,
+        'NURSING_TEST_SIZE': 0.25,
+        'DEVICE': 'cuda:0',
+        'DEPTHI': [2,2],
+        'WIDTHI': [48,128],
+        'LSTM_SEQLEN': 7,
+        'LSTM_HIDDEN': 8,
+        'LSTM_DROP': 0.25,
+    }
+    # n = 60
+    # nurses = list(range(11,71))
+    # nurses = np.random.choice(list(range(11,71)), n, replace=False)
+    # train_nurses, dev_nurses = train_test_split(nurses, test_size=CONFIG['NURSING_TEST_SIZE'])
+    # CONFIG['TRAIN_NURSES'] = train_nurses.tolist()
+    # CONFIG['VALIDATION'] = dev_nurses.tolist()
+    # trainloader, devloader = load_nursing_interpolated(
+    #     split=(CONFIG['TRAIN_NURSES'], CONFIG['VALIDATION']),
+    #     winsize=CONFIG['WINDOW_SIZE'],
+    #     batch_size=CONFIG['BATCH_SIZE'],
+    #     stride=CONFIG['NURSING_STRIDE'],
+    #     model_path='/home/musa/eating-detection/dev/10_dae/mask0.25-64-128-256-512/',
+    #     k=10
+    # )
+    train_nurses = json.load(open('/home/musa/eating-detection/dev/good_ones/[48, 128]_[2, 2]-interpolated/config.json'))['TRAIN_NURSES']
+    dev_nurses = json.load(open('/home/musa/eating-detection/dev/good_ones/[48, 128]_[2, 2]-interpolated/config.json'))['VALIDATION']
+    CONFIG['TRAIN_NURSES'] = train_nurses
+    CONFIG['VALIDATION'] = dev_nurses
+    trainloader, devloader = load_nursing_5_class(
+        split=(CONFIG['TRAIN_NURSES'], CONFIG['VALIDATION']),
+        winsize=CONFIG['WINDOW_SIZE'],
+        batch_size=CONFIG['BATCH_SIZE'],
+        stride=CONFIG['NURSING_STRIDE']
+    )
+    model = RegNetv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['CLASS_LR'])
+    outdir = Path(f'dev/good_ones/{CONFIG["WIDTHI"]}_{CONFIG["DEPTHI"]}-w1001')
+    optimization_loop_multi_class(
+        model,
+        trainloader,
+        devloader,
+        criterion,
+        optimizer,
+        epochs=150,
+        patience=30,
+        device=CONFIG['DEVICE'],
+        outdir=outdir,
+        writer=outdir,
+        label=f'interpolated: ',
+        config=CONFIG,
+        normalize=True
+    )
+    CONFIG['CLASS_WEIGHTS_FILE'] = str(outdir / 'best_model.pt')
+    trainloader, devloader = load_nursing_5_class(
+        split=(CONFIG['TRAIN_NURSES'], CONFIG['VALIDATION']),
+        winsize=CONFIG['WINDOW_SIZE']*CONFIG['LSTM_SEQLEN'],
+        batch_size=CONFIG['BATCH_SIZE'],
+        stride=CONFIG['WINDOW_SIZE']
+    )
+    model = ClassifierLSTM(CONFIG).to(CONFIG['DEVICE'])
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['CLASS_LR'])
+    lstm_outdir = Path(f'dev/good_ones/{CONFIG["WIDTHI"]}_{CONFIG["DEPTHI"]}-interpolated-lstm')
+    optimization_loop_multi_class(
+        model,
+        trainloader,
+        devloader,
+        criterion,
+        optimizer,
+        epochs=150,
+        device=CONFIG['DEVICE'],
+        patience=50,
+        outdir=lstm_outdir,
+        writer=lstm_outdir,
+        config=CONFIG,
+        label=f'interpolated lstm:',
+        normalize=True
+    )
+
+
 def train_mae_9(CONFIG, outdir, epochs=1000, patience=200, label=''):
     model = RegNetMAEv3(CONFIG=CONFIG).to(CONFIG['DEVICE'])
     criterion = nn.MSELoss()
@@ -661,7 +747,8 @@ def embedding_int():
         # )
 import threading
 if __name__ == '__main__':
-    embedding_int()
+    # embedding_int()
+    train()
     # k_fold1 = lambda: k_fold('cuda:0', 0, 4)
     # k_fold2 = lambda: k_fold('cuda:1', 5, 9)
     # thread1 = threading.Thread(target=k_fold1)
